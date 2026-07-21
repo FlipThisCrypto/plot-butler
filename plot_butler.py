@@ -223,21 +223,19 @@ _RECOMP_LINE=re.compile(
 
 def recompute_connections(port=11989):
  try:
-  out=run(['bash','-lc',f"ss -Htn state established 'sport = :{int(port)}'"],5)
-  lines=[l for l in out.splitlines() if l.strip()]
-  peers=set()
-  for l in lines:
+  out=run(['ss','-Htn'],5)
+  n=0; peers=set()
+  suf=':'+str(int(port))
+  for l in out.splitlines():
+   if 'ESTAB' not in l: continue
    parts=l.split()
-   if len(parts)>=4: peers.add(parts[3])
-  return {'established':len(lines),'unique_peers':len(peers)}
+   if len(parts)<5: continue
+   local,peer=parts[3],parts[4]
+   if local.endswith(suf):
+    n+=1; peers.add(peer)
+  return {'established':n,'unique_peers':len(peers)}
  except Exception:
   return {'established':0,'unique_peers':0}
-
-
-def unit_status(name):
- active=run(['systemctl','is-active',name],3) or 'unknown'
- enabled=run(['systemctl','is-enabled',name],3) or 'unknown'
- return {'name':name,'active':active,'enabled':enabled}
 
 def recompute_stats(window_s=RECOMPUTE_WINDOW_S):
  """Parse chia-recompute.service journal for recent request latencies."""
