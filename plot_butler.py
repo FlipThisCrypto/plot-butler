@@ -203,6 +203,20 @@ _RECOMP_LINE=re.compile(
  r'Request from \S+ for K\d+ C\d+ took ([0-9.]+) ms \(used_gpu = (\d+), is_fail = (\d+)\)'
 )
 
+
+def recompute_connections(port=11989):
+ try:
+  out=run(['ss','-tn','state','established',f'sport = :{port}'],5)
+  # first line is header
+  lines=[l for l in out.splitlines()[1:] if l.strip()]
+  peers=set()
+  for l in lines:
+   parts=l.split()
+   if len(parts)>=4: peers.add(parts[3])
+  return {'established':len(lines),'unique_peers':len(peers)}
+ except Exception:
+  return {'established':0,'unique_peers':0}
+
 def recompute_stats(window_s=RECOMPUTE_WINDOW_S):
  """Parse chia-recompute.service journal for recent request latencies."""
  lines=run(
@@ -506,6 +520,7 @@ def refresh():
   rc=recompute_stats()
   rc['device']=1
   rc['gpu1_util']=next((x['util'] for x in gs if x['index']==1),0)
+  rc['connections']=recompute_connections(rc.get('port') or 11989)
   allowed,reason,paused=transfer_allowed(rc,hv)
   policy={
    'allowed':allowed,'paused':paused,'reason':reason,
