@@ -61,7 +61,7 @@ _net_prev={'at':0,'ifaces':{}}
 state={
  'name':'The Plot Butler','updated':0,'plot':{},'gpus':[],'recompute':{},
  'harvester':{},'drives':[],'temperatures':[],'network':[],'transfers':[],
- 'history':{'gpu':[],'transfers':[],'recompute_p90':[]},'alerts':[],
+ 'history':{'gpu':[],'transfers':[],'recompute_p90':[]},'alerts':[],'alert_history':[],
  'transfer_policy':{},
 }
 # hysteresis for transfer gate (recompute + harvester)
@@ -685,10 +685,17 @@ def _refresh_once():
   if staging_free is not None and staging_free<STAGING_MIN_FREE_GB:
    alerts.append({'level':'critical','msg':f'NVMe staging free {staging_free:.0f} GiB < {STAGING_MIN_FREE_GB} GiB — plotter may stall'})
   with lock:
+   # merge unique alert msgs into history
+   hist=list(state.get('alert_history') or [])
+   for a in alerts:
+    msg=a.get('msg')
+    if msg and (not hist or hist[-1].get('msg')!=msg):
+     hist.append({'t':now,**a})
+   hist=hist[-50:]
    state.update({
     'updated':now,'plot':p,'gpus':gs,'drives':local_drives()+rd,
     'temperatures':temps()+gpu_t+rt,'network':net,'recompute':rc,'harvester':hv,
-    'transfer_policy':policy,'alerts':alerts,'storage_pressure':pressure,
+    'transfer_policy':policy,'alerts':alerts,'storage_pressure':pressure,'alert_history':hist,
    })
    state['transfers']=state['transfers'][-100:]
    state['history']['gpu']=(state['history']['gpu']+[
