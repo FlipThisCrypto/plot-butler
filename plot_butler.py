@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.55.0'
+VERSION='1.56.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -73,6 +73,9 @@ _xfer_paused=False
 _pause_reasons=set()
 _last_resume_at=0.0
 _manual_pause=False
+_post_hits=[]  # timestamps for simple POST rate limit
+POST_RATE_MAX=30
+POST_RATE_WINDOW_S=60
 
 def run(a,t=8):
  try:return subprocess.run(a,text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=t).stdout.strip()
@@ -816,9 +819,14 @@ class Handler(BaseHTTPRequestHandler):
   if self.headers.get('X-Api-Token')==API_TOKEN: return True
   return False
  def do_POST(self):
-  global _manual_pause, _xfer_paused, _last_resume_at
+  global _manual_pause, _xfer_paused, _last_resume_at, _post_hits
   if not self._authorized():
    self.send_error(401); return
+  now=time.time()
+  _post_hits=[x for x in _post_hits if now-x<POST_RATE_WINDOW_S]
+  if len(_post_hits)>=POST_RATE_MAX:
+   self.send_error(429); return
+  _post_hits.append(now)
   if self.path=='/api/pause-transfers':
    _manual_pause=True; n=stop_active_transfers('manual-pause'); _xfer_paused=True
    body=json.dumps({'ok':True,'paused':True,'stopped':n}).encode()
