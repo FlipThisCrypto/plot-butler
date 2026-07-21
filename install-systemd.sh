@@ -8,6 +8,10 @@ sudo install -m 644 "$ROOT/plot-butler.service" /etc/systemd/system/plot-butler.
 sudo install -m 644 "$ROOT/gigahorse-plotter.service" /etc/systemd/system/gigahorse-plotter.service
 sudo install -m 644 "$ROOT/systemd/chia-recompute.service.d/priority.conf" \
   /etc/systemd/system/chia-recompute.service.d/priority.conf
+if [ -f "$ROOT/systemd/chia-recompute.service.d/limits.conf" ]; then
+  sudo install -m 644 "$ROOT/systemd/chia-recompute.service.d/limits.conf" \
+    /etc/systemd/system/chia-recompute.service.d/limits.conf
+fi
 sudo install -m 644 "$ROOT/systemd/plot-butler.service.d/priority.conf" \
   /etc/systemd/system/plot-butler.service.d/priority.conf
 sudo systemctl daemon-reload
