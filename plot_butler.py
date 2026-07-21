@@ -841,6 +841,8 @@ class Handler(BaseHTTPRequestHandler):
   body=json.dumps({'ok':ok,'service':svc}).encode()
   self.send_response(200 if ok else 503); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(body)
  def do_GET(self):
+  if self.path=='/api/version':
+   self._send(200, json.dumps({'name':'The Plot Butler','version':VERSION}).encode()); return
   if self.path=='/api/metrics':
    with lock:
     rc=dict(state.get('recompute') or {}); hv=dict(state.get('harvester') or {})
