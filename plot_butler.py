@@ -6,7 +6,7 @@ to chiamain. Farming recompute is latency-sensitive (~28s signage window);
 bulk plot copies are not. This process therefore throttles transfers and
 pauses new ones when recompute latency climbs into stale-share territory.
 """
-import glob,json,os,re,shlex,signal,subprocess,threading,time
+import glob,json,os,re,shlex,shutil,signal,subprocess,threading,time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
@@ -35,6 +35,9 @@ TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
 STAGING_SETTLE_S=60
 TRANSFER_HISTORY_PATH=ROOT / 'transfer_history.json'
 TRANSFER_HISTORY_MAX=200
+SPOOL_WARN_PLOTS=10
+SPOOL_CRIT_PLOTS=25
+STAGING_MIN_FREE_GB=100
 
 lock=threading.RLock()
 active={}
@@ -496,11 +499,28 @@ def refresh():
    alerts.append({'level':'warn','msg':f"Harvester quality lookups slow (max={hv.get('latency_s',{}).get('max')}s)"})
   if paused:
    alerts.append({'level':'info','msg':f'Plot transfers gated: {reason}'})
+  queued=len(list(SPOOL.glob('*.plot')))+len(list(STAGING.glob('*.plot')))
+  try:
+   staging_free=shutil.disk_usage(STAGING).free/1073741824
+  except Exception:
+   staging_free=None
+  try:
+   spool_free=shutil.disk_usage(SPOOL).free/1073741824
+  except Exception:
+   spool_free=None
+  pressure={'queued_plots':queued,'staging_free_gb':round(staging_free,1) if staging_free is not None else None,
+            'spool_free_gb':round(spool_free,1) if spool_free is not None else None}
+  if queued>=SPOOL_CRIT_PLOTS:
+   alerts.append({'level':'critical','msg':f'Plot spool backlog critical: {queued} plots waiting (transfers may be gated for farming)'})
+  elif queued>=SPOOL_WARN_PLOTS:
+   alerts.append({'level':'warn','msg':f'Plot spool backlog elevated: {queued} plots waiting'})
+  if staging_free is not None and staging_free<STAGING_MIN_FREE_GB:
+   alerts.append({'level':'critical','msg':f'NVMe staging free {staging_free:.0f} GiB < {STAGING_MIN_FREE_GB} GiB — plotter may stall'})
   with lock:
    state.update({
     'updated':now,'plot':p,'gpus':gs,'drives':local_drives()+rd,
     'temperatures':temps()+gpu_t+rt,'network':net,'recompute':rc,'harvester':hv,
-    'transfer_policy':policy,'alerts':alerts,
+    'transfer_policy':policy,'alerts':alerts,'storage_pressure':pressure,
    })
    state['transfers']=state['transfers'][-100:]
    state['history']['gpu']=(state['history']['gpu']+[
