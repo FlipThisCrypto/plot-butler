@@ -1,46 +1,58 @@
 # The Plot Butler
 
-Operations console and transfer scheduler for Gigahorse C7 plotting on this host, with remote plot delivery to **chiamain** and a reserved GPU for **chia_recompute_server**.
+Operations console and transfer scheduler for Gigahorse C7 plotting on this host,
+with remote plot delivery to **chiamain** and a reserved GPU for **chia_recompute_server**.
 
-## What it does
+## Critical design rule
 
-- Dashboard on port **8088** (plot pipeline, GPUs, temps, drives, transfers)
-- Spools finished plots off NVMe and rsyncs them to remote harvester mounts
-- **Recompute-aware transfer policy**: single stream, 12 MiB/s cap, pauses shipping when recompute latency enters stale-share range
+Plot rsync and farming recompute share the Tailscale path to chiamain.
+**Farming wins.** Transfers throttle and pause when recompute or harvester
+quality latency enters stale-share range.
 
 ## Services
 
 | Unit | Role |
 |------|------|
-| `plot-butler.service` | Dashboard + transfer scheduler |
+| `plot-butler.service` | Dashboard + transfer scheduler + temp cleanup |
 | `gigahorse-plotter.service` | Plot loop (GPU 0) |
 | `chia-recompute.service` | Farming recompute (GPU 1, port 11989) |
 
-## Transfer / recompute policy
-
-Plot rsync and recompute share the Tailscale path to chiamain. Farming wins:
-
-- `MAX_ACTIVE_TRANSFERS=1`
-- `RSYNC_BWLIMIT_KBPS=12000` (~12 MiB/s)
-- Pause new transfers when recent recompute p90 ≥ 5 s or max ≥ 20 s
-- Resume when p90 ≤ 2.5 s (hysteresis)
-- Pause (and SIGTERM active rsync) when farmer quality lookups exceed ~15 s (stale-share risk)
-
-Live metrics: `/api/state` → `recompute`, `transfer_policy`, `alerts`.
-
-## systemd priority
-
-`install-systemd.sh` installs drop-ins so farming recompute outranks plot shipping:
-
-| Unit | Nice | CPUWeight | IOWeight |
-|------|------|-----------|----------|
-| `chia-recompute.service` | -10 | 500 | 500 |
-| `plot-butler.service` | 10 | 50 | 50 |
+Install/update units and priority drop-ins:
 
 ```bash
 ./install-systemd.sh
 sudo systemctl restart chia-recompute.service plot-butler.service
 ```
+
+## Transfer / recompute policy
+
+| Knob | Default | Env override |
+|------|---------|----------------|
+| Max concurrent rsync | 1 | `PLOT_BUTLER_MAX_TRANSFERS` |
+| Bandwidth cap | 12 MiB/s | `PLOT_BUTLER_BWLIMIT_KBPS` |
+| Warm start after pause | 6 MiB/s | `PLOT_BUTLER_BWLIMIT_WARM_KBPS` |
+| Pause on recompute p90 | 5000 ms | `PLOT_BUTLER_RECOMPUTE_PAUSE_P90_MS` |
+| Pause on harvester max | 15 s | `PLOT_BUTLER_HARVESTER_PAUSE_S` |
+
+Other:
+
+- Prefer destinations away from the mount of the worst recent quality lookup
+- SIGTERM in-flight rsync when farming gate trips (`--partial` resumes later)
+- Orphan `cuda_plot_tmp*` cleanup every 5 minutes
+- Optional `PLOT_BUTLER_API_TOKEN` for POST controls
+
+## HTTP API
+
+| Path | Description |
+|------|-------------|
+| `GET /` | Dashboard |
+| `GET /api/state` | Full telemetry JSON |
+| `GET /api/health` | Compact health (200 / 503) |
+| `GET /api/metrics` | Prometheus text metrics |
+| `POST /api/pause-transfers` | Manual pause |
+| `POST /api/resume-transfers` | Manual resume |
+| `POST /api/start-plotting` | Start plotter unit |
+| `POST /api/start-recompute` | Start recompute unit |
 
 ## Tests
 
@@ -48,11 +60,8 @@ sudo systemctl restart chia-recompute.service plot-butler.service
 python3 -m unittest tests.test_farming_gate -v
 ```
 
-## HTTP API
+## Logs
 
-| Path | Description |
-|------|-------------|
-| `GET /api/state` | Full dashboard telemetry JSON |
-| `GET /api/health` | Compact health (HTTP 200 healthy / 503 farming risk) |
-| `POST /api/start-plotting` | Start gigahorse plotter unit |
-| `POST /api/start-recompute` | Start recompute unit |
+- `plot-butler-events.log` — JSON events (pause/resume/transfer/cleanup)
+- `journalctl -u plot-butler.service`
+- `journalctl -u chia-recompute.service`
