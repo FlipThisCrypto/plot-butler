@@ -71,3 +71,12 @@ python3 -m unittest tests.test_farming_gate -v
 ```bash
 sudo cp logrotate-plot-butler.conf /etc/logrotate.d/plot-butler
 ```
+
+## Stale share recovery
+
+1. Check `GET /api/health` and dashboard recompute/harvester latency.
+2. If degraded: transfers auto-pause; confirm with `POST /api/pause-transfers`.
+3. Watch `journalctl -u chia-recompute.service -f` for request times (want << 5s).
+4. On farmer: quality lookups in `~/.chia/mainnet/log/debug.log` should be << 20s.
+5. Free NVMe if staging full: plot-butler cleans orphan `cuda_plot_tmp*`; verify `df -h /`.
+6. When healthy: `POST /api/resume-transfers` (warm bandwidth applies for 30m).
