@@ -21,6 +21,7 @@ def _env_float(name, default):
 
 ROOT=Path(__file__).resolve().parent
 STAGING=Path('/home/smokey/plots/staging')
+TEMP_DIR=Path('/home/smokey/plots/temp')
 SPOOL=Path('/media/smokey/1002/plot-butler/staging')
 REMOTE='chiamain@100.101.40.76'
 MIN_FREE_GB=90
@@ -323,6 +324,52 @@ def log_event(kind, **fields):
   with open(EVENT_LOG,'a') as f: f.write(json.dumps(rec,default=str)+'\n')
  except Exception: pass
 
+
+def open_temp_paths():
+ """Paths under TEMP_DIR currently open by any process (best-effort)."""
+ held=set()
+ try:
+  for proc in Path('/proc').iterdir():
+   if not proc.name.isdigit(): continue
+   fd=proc/'fd'
+   try:
+    for link in fd.iterdir():
+     try: target=os.readlink(link)
+     except OSError: continue
+     if target.startswith(str(TEMP_DIR)+'/') or target.startswith(str(STAGING)+'/'):
+      held.add(target)
+   except (PermissionError, FileNotFoundError, NotADirectoryError):
+    continue
+ except Exception:
+  pass
+ return held
+
+def cleanup_orphan_temps():
+ """Remove cuda_plot_tmp* not open by a live process — reclaim NVMe for farming/plotting."""
+ held=open_temp_paths()
+ removed=0; bytes_freed=0
+ for d in (TEMP_DIR, STAGING):
+  try: paths=list(d.glob('cuda_plot_tmp*.tmp'))+list(d.glob('*.plot.tmp'))
+  except Exception: continue
+  for f in paths:
+   sp=str(f)
+   if sp in held: continue
+   # keep very new staging plot.tmp (<10m) in case plotter mid-rename
+   try:
+    age=time.time()-f.stat().st_mtime
+    if f.suffix=='.tmp' and f.name.endswith('.plot.tmp') and age<600: continue
+    if age<120 and 'cuda_plot_tmp' in f.name: continue  # grace for just-created
+    sz=f.stat().st_size
+    f.unlink()
+    removed+=1; bytes_freed+=sz
+   except FileNotFoundError:
+    continue
+   except OSError:
+    continue
+ if removed:
+  log_event('orphan_temp_cleanup', removed=removed, bytes_freed=bytes_freed)
+ return removed, bytes_freed
+
 def load_transfer_history():
  try:
   if TRANSFER_HISTORY_PATH.exists():
@@ -476,7 +523,12 @@ def pick_destination(choices, used, hv=None):
  return max(avail, key=score)
 
 def transfer_loop():
+ last_cleanup=0
  while True:
+  if time.time()-last_cleanup>300:
+   try: cleanup_orphan_temps()
+   except Exception as e: log_event("cleanup_error", err=str(e))
+   last_cleanup=time.time()
   with lock:
    ds=list(state['drives'])
    rc=dict(state.get('recompute') or {})
