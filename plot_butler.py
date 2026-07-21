@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.51.0'
+VERSION='1.52.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path('/home/smokey/plots/staging')
 TEMP_DIR=Path('/home/smokey/plots/temp')
@@ -407,7 +407,12 @@ def temp_usage_stats():
  }
 
 def cleanup_orphan_temps():
- """Remove cuda_plot_tmp* not open by a live process — reclaim NVMe for farming/plotting."""
+ """Remove cuda_plot_tmp* not open by a live process — reclaim NVMe for farming/plotting.
+
+ Grace is short for large unheld files: after a plotter restart the previous
+ multi‑GiB tmp is never reopened but may still be young by mtime if the FS
+ refreshed it. Zero/small temps keep a longer grace for create races.
+ """
  held=open_temp_paths()
  removed=0; bytes_freed=0
  for d in (TEMP_DIR, STAGING):
@@ -416,12 +421,18 @@ def cleanup_orphan_temps():
   for f in paths:
    sp=str(f)
    if sp in held: continue
-   # keep very new staging plot.tmp (<10m) in case plotter mid-rename
    try:
-    age=time.time()-f.stat().st_mtime
-    if f.suffix=='.tmp' and f.name.endswith('.plot.tmp') and age<600: continue
-    if age<120 and 'cuda_plot_tmp' in f.name: continue  # grace for just-created
-    sz=f.stat().st_size
+    st=f.stat(); age=time.time()-st.st_mtime; sz=st.st_size
+    # incomplete plot rename target — keep longer
+    if f.name.endswith('.plot.tmp') and age<600: continue
+    if 'cuda_plot_tmp' in f.name:
+     # large unheld temps are always leftovers after plotter exit/restart
+     if sz>=(1<<30) and age>=15:  # >=1 GiB, 15s grace
+      pass
+     elif sz>=(1<<30):
+      continue
+     elif age<120:
+      continue  # small/new temps
     f.unlink()
     removed+=1; bytes_freed+=sz
    except FileNotFoundError:
@@ -596,7 +607,13 @@ def transfer_loop():
  last_cleanup=0
  while True:
   try:
-   if time.time()-last_cleanup>300:
+   # Reclaim aggressively when orphans are present; otherwise every 5 minutes.
+   try:
+    orphan_gb=temp_usage_stats().get('temp_orphan_gb') or 0
+   except Exception:
+    orphan_gb=0
+   interval=30 if orphan_gb>=1 else 300
+   if time.time()-last_cleanup>interval:
     try: cleanup_orphan_temps(); reap_orphan_rsync()
     except Exception as e: log_event("cleanup_error", err=str(e))
     last_cleanup=time.time()
