@@ -1,0 +1,7 @@
+# Scrape example — adjust host/port
+scrape_configs:
+  - job_name: plot_butler
+    scrape_interval: 15s
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ['127.0.0.1:8088']
