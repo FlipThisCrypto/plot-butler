@@ -225,6 +225,12 @@ def recompute_connections(port=11989):
  except Exception:
   return {'established':0,'unique_peers':0}
 
+
+def unit_status(name):
+ active=run(['systemctl','is-active',name],3) or 'unknown'
+ enabled=run(['systemctl','is-enabled',name],3) or 'unknown'
+ return {'name':name,'active':active,'enabled':enabled}
+
 def recompute_stats(window_s=RECOMPUTE_WINDOW_S):
  """Parse chia-recompute.service journal for recent request latencies."""
  lines=run(
@@ -625,6 +631,7 @@ def _refresh_once():
   p['queued_files']=len(p.get('staging_files',[]))
   p['created_count']=p.get('completed_count',0)
   gpu_t=[{'label':'local · GPU '+str(x['index'])+' · '+x['name'],'kind':'GPU','source':'nvidia-smi','temp_f':x['temp_f']} for x in gs]
+  units={u:unit_status(u) for u in ('chia-recompute.service','plot-butler.service','gigahorse-plotter.service')}
   rc=recompute_stats()
   rc['device']=1
   rc['gpu1_util']=next((x['util'] for x in gs if x['index']==1),0)
@@ -695,7 +702,7 @@ def _refresh_once():
    state.update({
     'updated':now,'plot':p,'gpus':gs,'drives':local_drives()+rd,
     'temperatures':temps()+gpu_t+rt,'network':net,'recompute':rc,'harvester':hv,
-    'transfer_policy':policy,'alerts':alerts,'storage_pressure':pressure,'alert_history':hist,
+    'transfer_policy':policy,'alerts':alerts,'storage_pressure':pressure,'alert_history':hist,'service_units':units,
    })
    state['transfers']=state['transfers'][-100:]
    state['history']['gpu']=(state['history']['gpu']+[
