@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.56.0'
+VERSION='1.57.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -56,6 +56,7 @@ MIN_PLOT_BYTES=_env_int('PLOT_BUTLER_MIN_PLOT_BYTES', 70*1024**3)  # C7 ~75G; re
 SPOOL_WARN_PLOTS=10
 SPOOL_CRIT_PLOTS=25
 STAGING_MIN_FREE_GB=100
+SPOOL_MIN_FREE_GB=_env_int("PLOT_BUTLER_SPOOL_MIN_FREE_GB",90)
 
 lock=threading.RLock()
 active={}
@@ -637,10 +638,16 @@ def transfer_loop():
     staging_free_gb=shutil.disk_usage(STAGING).free/1073741824
    except Exception:
     staging_free_gb=999
+   try:
+    spool_free_gb=shutil.disk_usage(SPOOL).free/1073741824
+   except Exception:
+    spool_free_gb=999
    pressure=staging_free_gb<STAGING_MIN_FREE_GB
    settle=10 if pressure else STAGING_SETTLE_S
    max_moves=3 if pressure else 1
    moved=0
+   if spool_free_gb<SPOOL_MIN_FREE_GB:
+    max_moves=0  # do not fill spool further until remote shipping catches up
    for f in sorted(STAGING.glob('*.plot'), key=lambda x: x.stat().st_mtime):
     if moved>=max_moves: break
     if f.name in active or time.time()-f.stat().st_mtime<settle: continue
@@ -774,6 +781,8 @@ def _refresh_once():
    alerts.append({'level':'critical','msg':f"Plot temp orphans {tu['temp_orphan_gb']:.0f} GiB ({tu.get('temp_orphan_files',0)} files) — cleanup should reclaim NVMe"})
   elif tu.get('temp_orphan_gb',0)>=20:
    alerts.append({'level':'warn','msg':f"Plot temp orphans {tu['temp_orphan_gb']:.0f} GiB ({tu.get('temp_orphan_files',0)} files)"})
+  if spool_free is not None and spool_free<SPOOL_MIN_FREE_GB:
+   alerts.append({'level':'critical','msg':f'HDD spool free {spool_free:.0f} GiB < {SPOOL_MIN_FREE_GB} GiB — staging drain paused'})
   if queued>=SPOOL_CRIT_PLOTS:
    alerts.append({'level':'critical','msg':f'Plot spool backlog critical: {queued} plots waiting (transfers may be gated for farming)'})
   elif queued>=SPOOL_WARN_PLOTS:
