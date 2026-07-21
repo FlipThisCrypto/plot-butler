@@ -24,5 +24,6 @@ Plot rsync and recompute share the Tailscale path to chiamain. Farming wins:
 - `RSYNC_BWLIMIT_KBPS=12000` (~12 MiB/s)
 - Pause new transfers when recent recompute p90 ≥ 5 s or max ≥ 20 s
 - Resume when p90 ≤ 2.5 s (hysteresis)
+- Pause (and SIGTERM active rsync) when farmer quality lookups exceed ~15 s (stale-share risk)
 
 Live metrics: `/api/state` → `recompute`, `transfer_policy`, `alerts`.

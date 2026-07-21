@@ -25,20 +25,27 @@ RECOMPUTE_WINDOW_S=300           # journal sample window for latency stats (5 mi
 RECOMPUTE_PAUSE_P90_MS=5000      # pause new transfers when recent p90 exceeds this
 RECOMPUTE_RESUME_P90_MS=2500     # resume only after p90 cools below this
 RECOMPUTE_CRITICAL_MAX_MS=20000  # also pause if any recent sample is this slow
+# Farmer harvester quality lookups must stay under ~20s or rewards are lost.
+HARVESTER_LOG='/home/chiamain/.chia/mainnet/log/debug.log'
+HARVESTER_SAMPLE_LINES=800
+HARVESTER_PAUSE_S=15.0           # pause shipping if recent max quality lookup exceeds this
+HARVESTER_RESUME_S=8.0           # resume only after max cools under this
+HARVESTER_POLL_S=30              # how often to re-read farmer log (SSH)
 TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
 STAGING_SETTLE_S=60
 
 lock=threading.RLock()
 active={}
-cache={'at':0,'drives':[],'temps':[],'plots':set()}
+cache={'at':0,'drives':[],'temps':[],'plots':set(),'harvester':{},'harvester_at':0}
 state={
  'name':'The Plot Butler','updated':0,'plot':{},'gpus':[],'recompute':{},
- 'drives':[],'temperatures':[],'network':[],'transfers':[],
+ 'harvester':{},'drives':[],'temperatures':[],'network':[],'transfers':[],
  'history':{'gpu':[],'transfers':[],'recompute_p90':[]},'alerts':[],
  'transfer_policy':{},
 }
-# hysteresis for transfer gate
+# hysteresis for transfer gate (recompute + harvester)
 _xfer_paused=False
+_pause_reasons=set()
 
 def run(a,t=8):
  try:return subprocess.run(a,text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=t).stdout.strip()
@@ -221,36 +228,121 @@ def recompute_stats(window_s=RECOMPUTE_WINDOW_S):
   'over_25s':sum(1 for x in times if x>25000),
  }
 
-def transfer_allowed(rc):
- """Hysteresis gate: farming latency wins over plot shipping."""
+_HARVEST_RE=re.compile(
+ r'Looking up qualities on (\S+) took:\s*([0-9]+(?:\.[0-9]+)?)',
+ re.I,
+)
+
+def harvester_quality_stats():
+ """Parse recent quality-lookup durations from chiamain harvester debug.log."""
+ # Prefer rg if present; fall back to grep. Larger timeout: farmer log is hot.
+ cmd=(
+  f'tail -n {int(HARVESTER_SAMPLE_LINES)} {shlex.quote(HARVESTER_LOG)} 2>/dev/null | '
+  f"grep -F 'Looking up qualities on' | tail -n 80"
+ )
+ raw=ssh(cmd,20)
+ times=[]; paths=[]
+ for l in raw.splitlines():
+  m=_HARVEST_RE.search(l)
+  if not m:continue
+  try:t=float(m.group(2))
+  except ValueError:continue
+  times.append(t); paths.append(m.group(1))
+ times.sort(); n=len(times)
+ def pct(p):
+  if not n:return None
+  return round(times[min(n-1,max(0,int(p/100*(n-1))))],3)
+ mx=round(times[-1],3) if n else None
+ p90=pct(90)
+ # Chia warns above 20s; treat sustained >15s max as farming risk.
+ if not n:
+  health='unknown'
+ elif (mx or 0)>=30 or (p90 or 0)>=20:
+  health='critical'
+ elif (mx or 0)>=HARVESTER_PAUSE_S or (p90 or 0)>=12:
+  health='degraded'
+ else:
+  health='healthy'
+ return {
+  'samples':n,
+  'latency_s':{
+   'min':round(times[0],3) if n else None,
+   'p50':pct(50),'p90':p90,'max':mx,
+   'avg':round(sum(times)/n,3) if n else None,
+  },
+  'health':health,
+  'over_20s':sum(1 for x in times if x>=20),
+  'over_60s':sum(1 for x in times if x>=60),
+  'worst_plot':paths[times.index(max(times))] if n else None,
+ }
+
+def stop_active_transfers(reason):
+ """SIGTERM in-flight rsyncs so farming I/O can recover; --partial resumes later."""
+ victims=[]
+ with lock:
+  for name,rec in list(active.items()):
+   pid=rec.get('pid')
+   if pid:
+    victims.append((name,pid))
+    rec['status']='paused'
+    rec['pause_reason']=reason
+ for name,pid in victims:
+  try:os.kill(pid,signal.SIGTERM)
+  except ProcessLookupError:pass
+  except PermissionError:pass
+ return len(victims)
+
+def transfer_allowed(rc, hv=None):
+ """Hysteresis gate: farming (recompute + harvester) wins over plot shipping."""
  global _xfer_paused
+ reasons=[]
+ # --- recompute path ---
  lat=rc.get('latency_ms') or {}
  p90=lat.get('p90'); mx=lat.get('max')
  n=rc.get('requests_recent') or 0
- reason='ok'
+ recompute_hold=False
  if rc.get('service')!='active':
-  # recompute down is worse than slow transfers; still allow shipping but flag
-  reason='recompute_inactive'
-  _xfer_paused=False
- elif n==0 or p90 is None or mx is None:
-  # No recent proofs: do not hold the gate forever on a stale pause.
-  if _xfer_paused:
-   _xfer_paused=False
-   reason='resumed no-recent-recompute'
-  else:
-   reason='ok idle-recompute'
- elif not _xfer_paused:
+  reasons.append('recompute_inactive')
+ elif n and p90 is not None and mx is not None:
   if p90>=RECOMPUTE_PAUSE_P90_MS or mx>=RECOMPUTE_CRITICAL_MAX_MS:
-   _xfer_paused=True
-   reason=f'pause p90={p90}ms max={mx}ms'
-  else:
-   reason='ok'
+   recompute_hold=True
+   reasons.append(f'recompute p90={p90}ms max={mx}ms')
+  elif _xfer_paused and not (p90<=RECOMPUTE_RESUME_P90_MS and mx<RECOMPUTE_CRITICAL_MAX_MS):
+   # still warm; hold if we were paused for recompute
+   if 'recompute' in _pause_reasons:
+    recompute_hold=True
+    reasons.append(f'recompute held p90={p90}ms')
+
+ # --- harvester quality path ---
+ hv=hv or {}
+ hlat=hv.get('latency_s') or {}
+ hmax=hlat.get('max'); hp90=hlat.get('p90')
+ harvester_hold=False
+ if hv.get('samples'):
+  if (hmax is not None and hmax>=HARVESTER_PAUSE_S) or (hp90 is not None and hp90>=12):
+   harvester_hold=True
+   reasons.append(f'harvester max={hmax}s p90={hp90}s')
+  elif _xfer_paused and 'harvester' in _pause_reasons:
+   if hmax is not None and hmax>HARVESTER_RESUME_S:
+    harvester_hold=True
+    reasons.append(f'harvester held max={hmax}s')
+
+ hold=recompute_hold or harvester_hold
+ if hold:
+  _pause_reasons.clear()
+  if recompute_hold:_pause_reasons.add('recompute')
+  if harvester_hold:_pause_reasons.add('harvester')
+  if not _xfer_paused:
+   stop_active_transfers(';'.join(reasons) or 'farming-protect')
+  _xfer_paused=True
+  reason='pause '+('; '.join(reasons) if reasons else 'farming')
  else:
-  if p90<=RECOMPUTE_RESUME_P90_MS and mx<RECOMPUTE_CRITICAL_MAX_MS:
-   _xfer_paused=False
+  if _xfer_paused:
    reason='resumed cool-down'
   else:
-   reason=f'held p90={p90}ms max={mx}ms'
+   reason='ok' if not reasons else 'ok '+('; '.join(reasons))
+  _xfer_paused=False
+  _pause_reasons.clear()
  return (not _xfer_paused), reason, _xfer_paused
 
 def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
@@ -340,8 +432,12 @@ def refresh():
   if refresh_remote:
    ds=remote_drives(); rt=remote_temps(ds); rp=remote_plot_names()
    with lock:cache.update({'at':now,'drives':ds,'temps':rt,'plots':rp})
+  if now-cache.get('harvester_at',0)>=HARVESTER_POLL_S:
+   hv=harvester_quality_stats()
+   with lock:cache.update({'harvester':hv,'harvester_at':now})
   with lock:
-   rd=list(cache['drives']); rt=list(cache['temps']); rp=set(cache['plots']); tr=list(active.values())
+   rd=list(cache['drives']); rt=list(cache['temps']); rp=set(cache['plots'])
+   hv=dict(cache.get('harvester') or {}); tr=list(active.values())
   p['transferred_count']=len(set(p.get('plot_names',[])) & rp)
   p['active_transfers']=len(tr)
   p['queued_files']=len(p.get('staging_files',[]))
@@ -350,12 +446,14 @@ def refresh():
   rc=recompute_stats()
   rc['device']=1
   rc['gpu1_util']=next((x['util'] for x in gs if x['index']==1),0)
-  allowed,reason,paused=transfer_allowed(rc)
+  allowed,reason,paused=transfer_allowed(rc,hv)
   policy={
    'allowed':allowed,'paused':paused,'reason':reason,
    'max_active':MAX_ACTIVE_TRANSFERS,'bwlimit_kbps':RSYNC_BWLIMIT_KBPS,
    'pause_p90_ms':RECOMPUTE_PAUSE_P90_MS,'resume_p90_ms':RECOMPUTE_RESUME_P90_MS,
    'critical_max_ms':RECOMPUTE_CRITICAL_MAX_MS,
+   'harvester_pause_s':HARVESTER_PAUSE_S,'harvester_resume_s':HARVESTER_RESUME_S,
+   'pause_sources':sorted(_pause_reasons),
   }
   net=[]
   for l in open('/proc/net/dev').read().splitlines()[2:]:
@@ -368,12 +466,16 @@ def refresh():
    alerts.append({'level':'critical','msg':f"Recompute latency critical (p90={rc['latency_ms'].get('p90')}ms max={rc['latency_ms'].get('max')}ms); plot transfers paused"})
   elif rc.get('health')=='degraded':
    alerts.append({'level':'warn','msg':f"Recompute latency degraded (p90={rc['latency_ms'].get('p90')}ms); protecting farming path"})
+  if hv.get('health')=='critical':
+   alerts.append({'level':'critical','msg':f"Harvester quality lookups critical (max={hv.get('latency_s',{}).get('max')}s over20={hv.get('over_20s')}); transfers paused to clear stales"})
+  elif hv.get('health')=='degraded':
+   alerts.append({'level':'warn','msg':f"Harvester quality lookups slow (max={hv.get('latency_s',{}).get('max')}s)"})
   if paused:
    alerts.append({'level':'info','msg':f'Plot transfers gated: {reason}'})
   with lock:
    state.update({
     'updated':now,'plot':p,'gpus':gs,'drives':local_drives()+rd,
-    'temperatures':temps()+gpu_t+rt,'network':net,'recompute':rc,
+    'temperatures':temps()+gpu_t+rt,'network':net,'recompute':rc,'harvester':hv,
     'transfer_policy':policy,'alerts':alerts,
    })
    state['transfers']=state['transfers'][-100:]
