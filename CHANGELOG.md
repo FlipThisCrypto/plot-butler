@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.61.0
+
+- Smoke check accepts degraded (503) health responses
+- Critical alert if recompute unit inactive
+- Spool free-space drain pause; transfer failure cooldown
+- Open-source packaging (CI, SECURITY, CONTRIBUTING, Docker)
+
 ## 1.58.0
 
 - Active vs orphan plot temp accounting and alerts
