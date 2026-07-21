@@ -237,6 +237,11 @@ def recompute_connections(port=11989):
  except Exception:
   return {'established':0,'unique_peers':0}
 
+def unit_status(name):
+ active=run(['systemctl','is-active',name],3) or 'unknown'
+ enabled=run(['systemctl','is-enabled',name],3) or 'unknown'
+ return {'name':name,'active':active,'enabled':enabled}
+
 def recompute_stats(window_s=RECOMPUTE_WINDOW_S):
  """Parse chia-recompute.service journal for recent request latencies."""
  lines=run(
