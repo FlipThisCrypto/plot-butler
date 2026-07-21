@@ -27,3 +27,18 @@ Plot rsync and recompute share the Tailscale path to chiamain. Farming wins:
 - Pause (and SIGTERM active rsync) when farmer quality lookups exceed ~15 s (stale-share risk)
 
 Live metrics: `/api/state` → `recompute`, `transfer_policy`, `alerts`.
+
+## systemd priority
+
+`install-systemd.sh` installs drop-ins so farming recompute outranks plot shipping:
+
+| Unit | Nice | CPUWeight | IOWeight |
+|------|------|-----------|----------|
+| `chia-recompute.service` | -10 | 500 | 500 |
+| `plot-butler.service` | 10 | 50 | 50 |
+
+```bash
+./install-systemd.sh
+sudo systemctl restart chia-recompute.service plot-butler.service
+```
+
