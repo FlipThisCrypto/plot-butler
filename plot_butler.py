@@ -19,6 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
+VERSION='1.50.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path('/home/smokey/plots/staging')
 TEMP_DIR=Path('/home/smokey/plots/temp')
@@ -61,7 +62,7 @@ active={}
 cache={'at':0,'drives':[],'temps':[],'plots':set(),'harvester':{},'harvester_at':0}
 _net_prev={'at':0,'ifaces':{}}
 state={
- 'name':'The Plot Butler','updated':0,'plot':{},'gpus':[],'recompute':{},
+ 'name':'The Plot Butler','version':VERSION,'updated':0,'plot':{},'gpus':[],'recompute':{},
  'harvester':{},'drives':[],'temperatures':[],'network':[],'transfers':[],
  'history':{'gpu':[],'transfers':[],'recompute_p90':[]},'alerts':[],'alert_history':[],
  'transfer_policy':{},
