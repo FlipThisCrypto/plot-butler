@@ -793,6 +793,8 @@ class Handler(BaseHTTPRequestHandler):
     f'plot_butler_queued_plots {sp.get("queued_plots") or 0}',
     f'plot_butler_staging_free_gb {sp.get("staging_free_gb") or 0}',
     f'plot_butler_active_transfers {sum(1 for x in tr if x.get("status")=="copying")}',
+    f'plot_butler_recompute_connections {(rc.get("connections") or {}).get("established") or 0}',
+    f'plot_butler_version_info{{version="{VERSION}"}} 1',
    ]
    body=('\n'.join(lines)+'\n').encode()
    self.send_response(200); self.send_header('Content-Type','text/plain; version=0.0.4'); self.end_headers(); self.wfile.write(body); return
