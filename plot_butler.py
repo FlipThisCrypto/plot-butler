@@ -767,11 +767,14 @@ class Handler(BaseHTTPRequestHandler):
     pol=dict(state.get('transfer_policy') or {})
     alerts=list(state.get('alerts') or [])
     updated=state.get('updated') or 0
-   healthy=rc.get('service')=='active' and hv.get('health') not in ('critical',) and rc.get('health') not in ('critical','down')
+   sp=dict(state.get('storage_pressure') or {})
+   disk_ok=(sp.get('staging_free_gb') is None) or (sp.get('staging_free_gb')>=STAGING_MIN_FREE_GB)
+   healthy=rc.get('service')=='active' and hv.get('health') not in ('critical',) and rc.get('health') not in ('critical','down') and disk_ok
    body=json.dumps({
     'ok':bool(healthy),'updated':updated,
     'recompute_health':rc.get('health'),'harvester_health':hv.get('health'),
     'transfers_paused':bool(pol.get('paused')),'pause_reason':pol.get('reason'),
+    'staging_free_gb':sp.get('staging_free_gb'),'queued_plots':sp.get('queued_plots'),
     'alerts':[a.get('msg') for a in alerts[:5]],
    }).encode()
    self.send_response(200 if healthy else 503)
