@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.59.0'
+VERSION='1.60.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -756,6 +756,8 @@ def _refresh_once():
      net.append({'iface':name,'rx':rx,'tx':tx,'rx_bps':max(0,rx_bps),'tx_bps':max(0,tx_bps)})
   _net_prev['at']=now_net; _net_prev['ifaces']={n['iface']:{'rx':n['rx'],'tx':n['tx']} for n in net}
   alerts=[]
+  if rc.get('service')!='active':
+   alerts.append({'level':'critical','msg':f"chia-recompute.service is {rc.get('service')!r} — farming recompute offline"})
   if rc.get('health')=='critical':
    alerts.append({'level':'critical','msg':f"Recompute latency critical (p90={rc['latency_ms'].get('p90')}ms max={rc['latency_ms'].get('max')}ms); plot transfers paused"})
   elif rc.get('health')=='degraded':
