@@ -658,8 +658,15 @@ def _refresh_once():
    spool_free=shutil.disk_usage(SPOOL).free/1073741824
   except Exception:
    spool_free=None
+  try:
+   temp_used=sum(f.stat().st_size for f in TEMP_DIR.glob('cuda_plot_tmp*') if f.is_file())/1073741824
+  except Exception:
+   temp_used=None
   pressure={'queued_plots':queued,'staging_free_gb':round(staging_free,1) if staging_free is not None else None,
-            'spool_free_gb':round(spool_free,1) if spool_free is not None else None}
+            'spool_free_gb':round(spool_free,1) if spool_free is not None else None,
+            'temp_used_gb':round(temp_used,1) if temp_used is not None else None}
+  if temp_used is not None and temp_used>200:
+   alerts.append({'level':'critical','msg':f'Plot temp dir using {temp_used:.0f} GiB — orphan cleanup may be failing'})
   if queued>=SPOOL_CRIT_PLOTS:
    alerts.append({'level':'critical','msg':f'Plot spool backlog critical: {queued} plots waiting (transfers may be gated for farming)'})
   elif queued>=SPOOL_WARN_PLOTS:
