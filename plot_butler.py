@@ -433,7 +433,7 @@ def stop_active_transfers(reason):
 
 def transfer_allowed(rc, hv=None):
  """Hysteresis gate: farming (recompute + harvester) wins over plot shipping."""
- global _xfer_paused, _last_resume_at
+ global _xfer_paused, _last_resume_at, _manual_pause
  reasons=[]
  if _manual_pause:
   if not _xfer_paused: stop_active_transfers("manual-pause")
