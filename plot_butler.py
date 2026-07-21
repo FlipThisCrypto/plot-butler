@@ -47,6 +47,7 @@ STAGING_SETTLE_S=60
 TRANSFER_HISTORY_PATH=ROOT / 'transfer_history.json'
 TRANSFER_HISTORY_MAX=200
 EVENT_LOG=ROOT / 'plot-butler-events.log'
+MIN_PLOT_BYTES=_env_int('PLOT_BUTLER_MIN_PLOT_BYTES', 70*1024**3)  # C7 ~75G; reject tiny junk
 SPOOL_WARN_PLOTS=10
 SPOOL_CRIT_PLOTS=25
 STAGING_MIN_FREE_GB=100
@@ -508,6 +509,11 @@ def transfer_loop():
   for f in list(SPOOL.glob('*.plot'))+list(STAGING.glob('*.plot')):
    if len(active)>=MAX_ACTIVE_TRANSFERS or f.name in active or not choices:continue
    if time.time()-f.stat().st_mtime<STAGING_SETTLE_S:continue
+   try:
+    sz=f.stat().st_size
+   except OSError: continue
+   if sz<MIN_PLOT_BYTES:
+    log_event('skip_small_plot', name=f.name, bytes=sz); continue
    used={x['dest'] for x in active.values()}
    with lock: hv=dict(state.get('harvester') or {})
    dest_rec=pick_destination(choices, used, hv)
