@@ -42,3 +42,8 @@ Live metrics: `/api/state` → `recompute`, `transfer_policy`, `alerts`.
 sudo systemctl restart chia-recompute.service plot-butler.service
 ```
 
+## Tests
+
+```bash
+python3 -m unittest tests.test_farming_gate -v
+```
