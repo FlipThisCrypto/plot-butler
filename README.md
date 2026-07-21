@@ -1,5 +1,7 @@
 # The Plot Butler
 
+[![CI](https://github.com/FlipThisCrypto/plot-butler/actions/workflows/ci.yml/badge.svg)](https://github.com/FlipThisCrypto/plot-butler/actions/workflows/ci.yml)
+
 **Open source:** [github.com/FlipThisCrypto/plot-butler](https://github.com/FlipThisCrypto/plot-butler)
 
 Operations console and transfer scheduler for **Gigahorse** Chia plotting with a reserved GPU for **`chia_recompute_server`**. Plot rsync shares the network path with farming recompute — **farming wins**.
