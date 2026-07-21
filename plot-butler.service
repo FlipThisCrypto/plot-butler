@@ -14,6 +14,8 @@ Environment=PLOT_BUTLER_PORT=8088
 # Farming-protect knobs (optional overrides):
 # Environment=PLOT_BUTLER_BWLIMIT_KBPS=12000
 # Environment=PLOT_BUTLER_HARVESTER_PAUSE_S=15
+# Environment=PLOT_BUTLER_API_TOKEN=
+# Environment=PLOT_BUTLER_BIND=0.0.0.0
 
 [Install]
 WantedBy=multi-user.target

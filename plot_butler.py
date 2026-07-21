@@ -25,6 +25,8 @@ SPOOL=Path('/media/smokey/1002/plot-butler/staging')
 REMOTE='chiamain@100.101.40.76'
 MIN_FREE_GB=90
 PORT=int(os.environ.get('PLOT_BUTLER_PORT','8088'))
+API_TOKEN=os.environ.get('PLOT_BUTLER_API_TOKEN','').strip()
+BIND_HOST=os.environ.get('PLOT_BUTLER_BIND','0.0.0.0')
 
 # Shared path with recompute: one bulk stream, modest ceiling, adaptive pause.
 MAX_ACTIVE_TRANSFERS=_env_int("PLOT_BUTLER_MAX_TRANSFERS",1)
@@ -615,8 +617,16 @@ def _refresh_once():
    state['history']['recompute_p90']=(state['history']['recompute_p90']+[{'t':now,'p90':p90}])[-120:]
 
 class Handler(BaseHTTPRequestHandler):
+ def _authorized(self):
+  if not API_TOKEN: return True
+  h=self.headers.get('Authorization','')
+  if h==f'Bearer {API_TOKEN}': return True
+  if self.headers.get('X-Api-Token')==API_TOKEN: return True
+  return False
  def do_POST(self):
   global _manual_pause, _xfer_paused, _last_resume_at
+  if not self._authorized():
+   self.send_error(401); return
   if self.path=='/api/pause-transfers':
    _manual_pause=True; n=stop_active_transfers('manual-pause'); _xfer_paused=True
    body=json.dumps({'ok':True,'paused':True,'stopped':n}).encode()
@@ -691,4 +701,5 @@ if __name__=='__main__':
   f'pause_p90={RECOMPUTE_PAUSE_P90_MS}ms resume_p90={RECOMPUTE_RESUME_P90_MS}ms',
   flush=True,
  )
- ThreadingHTTPServer(('0.0.0.0',PORT),Handler).serve_forever()
+ print(f'Bind {BIND_HOST}:{PORT} auth={"on" if API_TOKEN else "off"}',flush=True)
+ ThreadingHTTPServer((BIND_HOST,PORT),Handler).serve_forever()
