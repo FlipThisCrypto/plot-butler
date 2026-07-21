@@ -65,3 +65,9 @@ python3 -m unittest tests.test_farming_gate -v
 - `plot-butler-events.log` — JSON events (pause/resume/transfer/cleanup)
 - `journalctl -u plot-butler.service`
 - `journalctl -u chia-recompute.service`
+
+## Log rotation
+
+```bash
+sudo cp logrotate-plot-butler.conf /etc/logrotate.d/plot-butler
+```
