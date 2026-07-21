@@ -510,7 +510,8 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   b=int(remote) if remote.isdigit() else rec.get('bytes',0)
   now=time.time(); prev=rec.get('bytes',b); pt=rec.get('sample_time',now)
   speed=max(0,(b-prev)/max(.1,now-pt))
-  with lock:rec.update({'bytes':b,'speed':speed,'sample_time':now})
+  remain=max(0, expected-b); eta=(remain/speed) if speed>1 else None
+  with lock:rec.update({'bytes':b,'speed':speed,'sample_time':now,'eta_s':round(eta,1) if eta is not None else None,'pct':round(100*b/expected,2) if expected else 0})
   samples.append(speed)
   if b>last_bytes:
    last_bytes=b; last_progress=now
