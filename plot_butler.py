@@ -451,8 +451,12 @@ def load_transfer_history():
   if TRANSFER_HISTORY_PATH.exists():
    data=json.loads(TRANSFER_HISTORY_PATH.read_text())
    if isinstance(data,list):
-    with lock: state['transfers']=data[-TRANSFER_HISTORY_MAX:]
- except Exception: pass
+    clean=[x for x in data if isinstance(x,dict) and x.get('name')]
+    with lock: state['transfers']=clean[-TRANSFER_HISTORY_MAX:]
+   else:
+    log_event('history_corrupt', detail='not a list')
+ except Exception as e:
+  log_event('history_load_error', err=str(e))
 
 def save_transfer_history():
  try:
