@@ -1,19 +1,43 @@
 #!/usr/bin/env bash
+# Gigahorse plot loop. Secrets/paths come from plotter.env (not committed).
 set -u
-PLOTTER=/home/smokey/gigahorse/cuda_plot_k32
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+if [[ -f "$ROOT/plotter.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$ROOT/plotter.env"
+  set +a
+fi
+
+PLOTTER="${PLOTTER:-/home/smokey/gigahorse/cuda_plot_k32}"
+PLOT_STAGING="${PLOT_STAGING:-/home/smokey/plots/staging}"
+PLOT_TEMP="${PLOT_TEMP:-/home/smokey/plots/temp}"
+PLOT_DEST="${PLOT_DEST:-/home/smokey/plots/staging}"
+PLOT_COMPRESSION="${PLOT_COMPRESSION:-7}"
+PLOT_GPU="${PLOT_GPU:-0}"
+LOG="${PLOT_LOG:-/home/smokey/logs/gigahorse-c7-live.log}"
+
+if [[ -z "${PLOT_CONTRACT:-}" || -z "${PLOT_FARMER_PK:-}" ]]; then
+  echo "plotter_loop: PLOT_CONTRACT and PLOT_FARMER_PK must be set (see plotter.env.example)" >&2
+  sleep 60
+  exit 1
+fi
+
+mkdir -p "$(dirname "$LOG")" "$PLOT_STAGING" "$PLOT_TEMP" "$PLOT_DEST"
+
 while true; do
-  if /home/smokey/plot-butler/plot_capacity_guard.sh; then
-    "$PLOTTER" -n 1 -C 7 -g 0 \
-      -t /home/smokey/plots/staging/ \
-      -3 /home/smokey/plots/temp/ \
-      -d /home/smokey/plots/staging/ \
-      -c xch10e9e0xddh2wv4y4d4al57p0ere5q5mq0xhzfpxvtrsakkncqn4xsga9nmy \
-      -f 933ec1c0da9b6d763c245e5d1e98dabbe0493540ffdd0c7ba4bc01551035a95bdc8f3306435c2e4431a1175af12468a3 \
-      -Q 1 -D 2>&1 | tee -a /home/smokey/logs/gigahorse-c7-live.log
+  if "$ROOT/plot_capacity_guard.sh"; then
+    "$PLOTTER" -n 1 -C "$PLOT_COMPRESSION" -g "$PLOT_GPU" \
+      -t "$PLOT_STAGING/" \
+      -3 "$PLOT_TEMP/" \
+      -d "$PLOT_DEST/" \
+      -c "$PLOT_CONTRACT" \
+      -f "$PLOT_FARMER_PK" \
+      -Q 1 -D 2>&1 | tee -a "$LOG"
     rc=${PIPESTATUS[0]}
     [[ "$rc" -eq 0 ]] || sleep 30
   else
     sleep 300
   fi
 done
-

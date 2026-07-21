@@ -89,7 +89,7 @@ This repository ships with paths and hostnames for a reference deployment. Befor
 
 - Staging / spool / temp directories in `plot_butler.py`
 - SSH remote farmer host (`REMOTE`)
-- Plotter binary and keys in `plotter_loop.sh`
+- Plotter binary and keys in `plotter.env` (copy from `plotter.env.example`; never commit secrets)
 - Systemd unit user and working directories
 
 ## Tests
