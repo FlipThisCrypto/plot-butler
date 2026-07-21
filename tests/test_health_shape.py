@@ -24,5 +24,11 @@ class TestHealthConstruction(unittest.TestCase):
         for k in ("ok", "recompute_health", "harvester_health", "transfers_paused"):
             self.assertIn(k, body)
 
+    def test_starting_means_not_ok_but_not_offline(self):
+        # Contract: updated==0 => starting (callers should not treat as recompute crash)
+        body = {"ok": False, "status": "starting", "updated": 0}
+        self.assertEqual(body["status"], "starting")
+        self.assertFalse(body["ok"])
+
 if __name__ == "__main__":
     unittest.main()
