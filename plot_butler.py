@@ -321,7 +321,7 @@ def stop_active_transfers(reason):
 
 def transfer_allowed(rc, hv=None):
  """Hysteresis gate: farming (recompute + harvester) wins over plot shipping."""
- global _xfer_paused
+ global _xfer_paused, _last_resume_at
  reasons=[]
  # --- recompute path ---
  lat=rc.get('latency_ms') or {}
@@ -366,7 +366,6 @@ def transfer_allowed(rc, hv=None):
  else:
   if _xfer_paused:
    reason='resumed cool-down'
-   global _last_resume_at
    _last_resume_at=time.time()
   else:
    reason='ok' if not reasons else 'ok '+('; '.join(reasons))
