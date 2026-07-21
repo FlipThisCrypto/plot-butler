@@ -441,7 +441,9 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
  ok=p.wait()==0 and remote_size.strip().splitlines()[-1:]==[str(expected)]
  if ok:
   path.unlink(missing_ok=True)
-  ssh(f'chia plots add -d {shlex.quote(dest)}',8)
+  add=ssh(f'chia plots add -d {shlex.quote(dest)} 2>&1 || true',15)
+  with lock: rec['plots_add']=add[-500:]
+  log_event('plots_add', dest=dest, name=path.name, out=add[-200:])
  with lock:
   rec.update({
    'done':time.time(),
