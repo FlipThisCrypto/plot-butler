@@ -250,7 +250,7 @@ def recompute_stats(window_s=RECOMPUTE_WINDOW_S):
  n=len(times)
  def pct(p):
   if not n:return None
-  return round(times[min(n-1,max(0,int(p/100*(n-1))))],2)
+  return round(times[min(n-1,max(0,round((p/100)*(n-1))))],2)
  service=run(['systemctl','is-active','chia-recompute.service'],3) or 'unknown'
  avg=round(sum(times)/n,2) if n else None
  p90=pct(90); p99=pct(99); mx=round(times[-1],2) if n else None
@@ -299,7 +299,7 @@ def harvester_quality_stats():
  times.sort(); n=len(times)
  def pct(p):
   if not n:return None
-  return round(times[min(n-1,max(0,int(p/100*(n-1))))],3)
+  return round(times[min(n-1,max(0,round((p/100)*(n-1))))],3)
  mx=round(times[-1],3) if n else None
  p90=pct(90)
  # Chia warns above 20s; treat sustained >15s max as farming risk.
