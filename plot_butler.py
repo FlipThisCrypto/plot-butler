@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.57.0'
+VERSION='1.58.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -739,6 +739,7 @@ def _refresh_once():
    'pause_p90_ms':RECOMPUTE_PAUSE_P90_MS,'resume_p90_ms':RECOMPUTE_RESUME_P90_MS,
    'critical_max_ms':RECOMPUTE_CRITICAL_MAX_MS,
    'harvester_pause_s':HARVESTER_PAUSE_S,'harvester_resume_s':HARVESTER_RESUME_S,
+   'spool_min_free_gb':SPOOL_MIN_FREE_GB,'staging_min_free_gb':STAGING_MIN_FREE_GB,
    'pause_sources':sorted(_pause_reasons),
   }
   net=[]; now_net=time.time(); prev=_net_prev
