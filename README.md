@@ -47,3 +47,12 @@ sudo systemctl restart chia-recompute.service plot-butler.service
 ```bash
 python3 -m unittest tests.test_farming_gate -v
 ```
+
+## HTTP API
+
+| Path | Description |
+|------|-------------|
+| `GET /api/state` | Full dashboard telemetry JSON |
+| `GET /api/health` | Compact health (HTTP 200 healthy / 503 farming risk) |
+| `POST /api/start-plotting` | Start gigahorse plotter unit |
+| `POST /api/start-recompute` | Start recompute unit |

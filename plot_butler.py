@@ -503,6 +503,23 @@ class Handler(BaseHTTPRequestHandler):
   body=json.dumps({'ok':ok,'service':svc}).encode()
   self.send_response(200 if ok else 503); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(body)
  def do_GET(self):
+  if self.path=='/api/health':
+   with lock:
+    rc=dict(state.get('recompute') or {})
+    hv=dict(state.get('harvester') or {})
+    pol=dict(state.get('transfer_policy') or {})
+    alerts=list(state.get('alerts') or [])
+    updated=state.get('updated') or 0
+   healthy=rc.get('service')=='active' and hv.get('health') not in ('critical',) and rc.get('health') not in ('critical','down')
+   body=json.dumps({
+    'ok':bool(healthy),'updated':updated,
+    'recompute_health':rc.get('health'),'harvester_health':hv.get('health'),
+    'transfers_paused':bool(pol.get('paused')),'pause_reason':pol.get('reason'),
+    'alerts':[a.get('msg') for a in alerts[:5]],
+   }).encode()
+   self.send_response(200 if healthy else 503)
+   self.send_header('Content-Type','application/json'); self.send_header('Cache-Control','no-store')
+   self.end_headers(); self.wfile.write(body); return
   if self.path=='/api/state':
    with lock:
     d=dict(state); d['transfers']=state['transfers']+list(active.values())
