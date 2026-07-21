@@ -11,6 +11,14 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 
+
+def _env_int(name, default):
+ try:return int(os.environ.get(name, default))
+ except (TypeError, ValueError):return int(default)
+def _env_float(name, default):
+ try:return float(os.environ.get(name, default))
+ except (TypeError, ValueError):return float(default)
+
 ROOT=Path(__file__).resolve().parent
 STAGING=Path('/home/smokey/plots/staging')
 SPOOL=Path('/media/smokey/1002/plot-butler/staging')
@@ -19,18 +27,18 @@ MIN_FREE_GB=90
 PORT=int(os.environ.get('PLOT_BUTLER_PORT','8088'))
 
 # Shared path with recompute: one bulk stream, modest ceiling, adaptive pause.
-MAX_ACTIVE_TRANSFERS=1
-RSYNC_BWLIMIT_KBPS=12000          # 12 MiB/s — leaves headroom for recompute RTT
-RSYNC_BWLIMIT_WARM_KBPS=6000      # half rate for first transfer after farming pause
+MAX_ACTIVE_TRANSFERS=_env_int("PLOT_BUTLER_MAX_TRANSFERS",1)
+RSYNC_BWLIMIT_KBPS=_env_int("PLOT_BUTLER_BWLIMIT_KBPS",12000)  # leaves headroom for recompute RTT
+RSYNC_BWLIMIT_WARM_KBPS=_env_int("PLOT_BUTLER_BWLIMIT_WARM_KBPS",6000)
 RECOMPUTE_WINDOW_S=300           # journal sample window for latency stats (5 min)
-RECOMPUTE_PAUSE_P90_MS=5000      # pause new transfers when recent p90 exceeds this
-RECOMPUTE_RESUME_P90_MS=2500     # resume only after p90 cools below this
-RECOMPUTE_CRITICAL_MAX_MS=20000  # also pause if any recent sample is this slow
+RECOMPUTE_PAUSE_P90_MS=_env_int("PLOT_BUTLER_RECOMPUTE_PAUSE_P90_MS",5000)
+RECOMPUTE_RESUME_P90_MS=_env_int("PLOT_BUTLER_RECOMPUTE_RESUME_P90_MS",2500)
+RECOMPUTE_CRITICAL_MAX_MS=_env_int("PLOT_BUTLER_RECOMPUTE_CRITICAL_MAX_MS",20000)
 # Farmer harvester quality lookups must stay under ~20s or rewards are lost.
 HARVESTER_LOG='/home/chiamain/.chia/mainnet/log/debug.log'
 HARVESTER_SAMPLE_LINES=800
-HARVESTER_PAUSE_S=15.0           # pause shipping if recent max quality lookup exceeds this
-HARVESTER_RESUME_S=8.0           # resume only after max cools under this
+HARVESTER_PAUSE_S=_env_float("PLOT_BUTLER_HARVESTER_PAUSE_S",15.0)
+HARVESTER_RESUME_S=_env_float("PLOT_BUTLER_HARVESTER_RESUME_S",8.0)
 HARVESTER_POLL_S=30              # how often to re-read farmer log (SSH)
 TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
 STAGING_SETTLE_S=60

@@ -11,6 +11,9 @@ ExecStart=/usr/bin/python3 /home/smokey/plot-butler/plot_butler.py
 Restart=always
 RestartSec=5
 Environment=PLOT_BUTLER_PORT=8088
+# Farming-protect knobs (optional overrides):
+# Environment=PLOT_BUTLER_BWLIMIT_KBPS=12000
+# Environment=PLOT_BUTLER_HARVESTER_PAUSE_S=15
 
 [Install]
 WantedBy=multi-user.target
