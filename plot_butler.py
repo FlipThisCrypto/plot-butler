@@ -850,6 +850,10 @@ class Handler(BaseHTTPRequestHandler):
   body=json.dumps({'ok':ok,'service':svc}).encode()
   self.send_response(200 if ok else 503); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(body)
  def do_GET(self):
+  path_only=self.path.split('?',1)[0]
+  if len(self.path)>512 or '..' in path_only:
+   self.send_error(400); return
+  self.path=path_only  # ignore query string for routing
   if self.path=='/api/version':
    self._send(200, json.dumps({'name':'The Plot Butler','version':VERSION}).encode()); return
   if self.path=='/api/metrics':
