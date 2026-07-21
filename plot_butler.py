@@ -61,6 +61,7 @@ state={
 _xfer_paused=False
 _pause_reasons=set()
 _last_resume_at=0.0
+_manual_pause=False
 
 def run(a,t=8):
  try:return subprocess.run(a,text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=t).stdout.strip()
@@ -206,9 +207,8 @@ _RECOMP_LINE=re.compile(
 
 def recompute_connections(port=11989):
  try:
-  out=run(['ss','-tn','state','established',f'sport = :{port}'],5)
-  # first line is header
-  lines=[l for l in out.splitlines()[1:] if l.strip()]
+  out=run(['bash','-lc',f"ss -Htn state established 'sport = :{int(port)}'"],5)
+  lines=[l for l in out.splitlines() if l.strip()]
   peers=set()
   for l in lines:
    parts=l.split()
@@ -345,6 +345,10 @@ def transfer_allowed(rc, hv=None):
  """Hysteresis gate: farming (recompute + harvester) wins over plot shipping."""
  global _xfer_paused, _last_resume_at
  reasons=[]
+ if _manual_pause:
+  if not _xfer_paused: stop_active_transfers("manual-pause")
+  _xfer_paused=True
+  return False, "manual pause", True
  # --- recompute path ---
  lat=rc.get('latency_ms') or {}
  p90=lat.get('p90'); mx=lat.get('max')
@@ -583,6 +587,15 @@ def refresh():
 
 class Handler(BaseHTTPRequestHandler):
  def do_POST(self):
+  global _manual_pause, _xfer_paused, _last_resume_at
+  if self.path=='/api/pause-transfers':
+   _manual_pause=True; n=stop_active_transfers('manual-pause'); _xfer_paused=True
+   body=json.dumps({'ok':True,'paused':True,'stopped':n}).encode()
+   self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(body); return
+  if self.path=='/api/resume-transfers':
+   _manual_pause=False; _xfer_paused=False; _last_resume_at=time.time(); _pause_reasons.clear()
+   body=json.dumps({'ok':True,'paused':False}).encode()
+   self.send_response(200); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(body); return
   svc={'/api/start-plotting':'gigahorse-plotter.service','/api/start-recompute':'chia-recompute.service'}.get(self.path)
   if not svc:self.send_error(404);return
   ok=run(['sudo','-n','systemctl','start',svc],12) is not None and run(['systemctl','is-active',svc],5)=='active'
