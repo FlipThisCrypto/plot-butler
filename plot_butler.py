@@ -735,6 +735,14 @@ def _refresh_once():
    state['history']['recompute_p90']=(state['history']['recompute_p90']+[{'t':now,'p90':p90}])[-120:]
 
 class Handler(BaseHTTPRequestHandler):
+ def _send(self, code, body, ctype='application/json'):
+  if isinstance(body,str): body=body.encode()
+  self.send_response(code)
+  self.send_header('Content-Type', ctype)
+  self.send_header('X-Content-Type-Options','nosniff')
+  self.send_header('Cache-Control','no-store')
+  self.send_header('X-Frame-Options','DENY')
+  self.end_headers(); self.wfile.write(body)
  def _authorized(self):
   if not API_TOKEN: return True
   h=self.headers.get('Authorization','')
@@ -797,14 +805,11 @@ class Handler(BaseHTTPRequestHandler):
     'staging_free_gb':sp.get('staging_free_gb'),'queued_plots':sp.get('queued_plots'),
     'alerts':[a.get('msg') for a in alerts[:5]],
    }).encode()
-   self.send_response(200 if healthy else 503)
-   self.send_header('Content-Type','application/json'); self.send_header('Cache-Control','no-store')
-   self.end_headers(); self.wfile.write(body); return
+   self._send(200 if healthy else 503, body); return
   if self.path=='/api/state':
    with lock:
     d=dict(state); d['transfers']=state['transfers']+list(active.values())
-   b=json.dumps(d).encode()
-   self.send_response(200); self.send_header('Content-Type','application/json'); self.send_header('Cache-Control','no-store'); self.end_headers(); self.wfile.write(b); return
+   self._send(200, json.dumps(d).encode()); return
   if self.path in ('/','/index.html'):
    b=(ROOT/'index.html').read_bytes()
    self.send_response(200); self.send_header('Content-Type','text/html'); self.end_headers(); self.wfile.write(b); return
