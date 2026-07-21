@@ -110,6 +110,12 @@ class TestTransferGate(unittest.TestCase):
 
 
 class TestDestinationPick(unittest.TestCase):
+    def test_stall_default(self):
+        self.assertGreaterEqual(pb.TRANSFER_STALL_S, 60)
+
+    def test_pick_destination_empty(self):
+        self.assertIsNone(pb.pick_destination([], set(), {}))
+
     def test_pick_destination_avoids_worst_mount(self):
         choices = [
             {"mount": "/media/chiamain/a", "free_gb": 100},
