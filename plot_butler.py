@@ -465,18 +465,27 @@ def transfer_loop():
    rc=dict(state.get('recompute') or {})
    policy=dict(state.get('transfer_policy') or {})
   SPOOL.mkdir(parents=True,exist_ok=True)
-  # Move finished plots off the NVMe one at a time. The HDD spool leaves NVMe
-  # bandwidth for the active plotter.
-  for f in STAGING.glob('*.plot'):
-   if f.name in active or time.time()-f.stat().st_mtime<STAGING_SETTLE_S:continue
+  # Move finished plots off the NVMe. Under free-space pressure, drain faster
+  # (shorter settle, more files per tick) so the plotter does not stall.
+  try:
+   staging_free_gb=shutil.disk_usage(STAGING).free/1073741824
+  except Exception:
+   staging_free_gb=999
+  pressure=staging_free_gb<STAGING_MIN_FREE_GB
+  settle=10 if pressure else STAGING_SETTLE_S
+  max_moves=3 if pressure else 1
+  moved=0
+  for f in sorted(STAGING.glob('*.plot'), key=lambda x: x.stat().st_mtime):
+   if moved>=max_moves: break
+   if f.name in active or time.time()-f.stat().st_mtime<settle: continue
    target=SPOOL/(f.name+'.part'); final=SPOOL/f.name
-   if target.exists() or final.exists():continue
+   if target.exists() or final.exists(): continue
    cp=subprocess.run(
     ['ionice','-c3','nice','-n','15','cp','--reflink=auto',str(f),str(target)],
     stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
    )
    if cp.returncode==0 and target.stat().st_size==f.stat().st_size:
-    target.rename(final); f.unlink(); break
+    target.rename(final); f.unlink(); moved+=1
 
   allowed=policy.get('allowed',True)
   if not allowed:
