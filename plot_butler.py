@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.58.0'
+VERSION='1.59.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -764,6 +764,8 @@ def _refresh_once():
    alerts.append({'level':'warn','msg':f"Harvester quality lookups slow (max={hv.get('latency_s',{}).get('max')}s)"})
   if paused:
    alerts.append({'level':'info','msg':f'Plot transfers gated: {reason}'})
+  if p.get('waiting_for_staging'):
+   alerts.append({'level':'warn','msg':f"Plotter waiting for staging space (idle {p.get('idle_s',0):.0f}s)"})
   queued=len(list(SPOOL.glob('*.plot')))+len(list(STAGING.glob('*.plot')))
   try:
    staging_free=shutil.disk_usage(STAGING).free/1073741824
