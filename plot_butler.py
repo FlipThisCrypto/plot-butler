@@ -620,6 +620,27 @@ class Handler(BaseHTTPRequestHandler):
   body=json.dumps({'ok':ok,'service':svc}).encode()
   self.send_response(200 if ok else 503); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(body)
  def do_GET(self):
+  if self.path=='/api/metrics':
+   with lock:
+    rc=dict(state.get('recompute') or {}); hv=dict(state.get('harvester') or {})
+    pol=dict(state.get('transfer_policy') or {}); sp=dict(state.get('storage_pressure') or {})
+    tr=list(state.get('transfers') or [])+list(active.values())
+   lat=rc.get('latency_ms') or {}; hl=hv.get('latency_s') or {}
+   lines=[
+    '# HELP plot_butler_up 1 if process serving',
+    '# TYPE plot_butler_up gauge',
+    'plot_butler_up 1',
+    f'plot_butler_recompute_p90_ms {lat.get("p90") or 0}',
+    f'plot_butler_recompute_max_ms {lat.get("max") or 0}',
+    f'plot_butler_harvester_p90_s {hl.get("p90") or 0}',
+    f'plot_butler_harvester_max_s {hl.get("max") or 0}',
+    f'plot_butler_transfers_paused {1 if pol.get("paused") else 0}',
+    f'plot_butler_queued_plots {sp.get("queued_plots") or 0}',
+    f'plot_butler_staging_free_gb {sp.get("staging_free_gb") or 0}',
+    f'plot_butler_active_transfers {sum(1 for x in tr if x.get("status")=="copying")}',
+   ]
+   body=('\n'.join(lines)+'\n').encode()
+   self.send_response(200); self.send_header('Content-Type','text/plain; version=0.0.4'); self.end_headers(); self.wfile.write(body); return
   if self.path=='/api/health':
    with lock:
     rc=dict(state.get('recompute') or {})
