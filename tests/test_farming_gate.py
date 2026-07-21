@@ -145,11 +145,19 @@ class TestDestinationPick(unittest.TestCase):
 
     def test_pick_destination_avoids_worst_mount(self):
         choices = [
-            {"mount": "/media/chiamain/a", "free_gb": 100},
-            {"mount": "/media/chiamain/b", "free_gb": 500},
+            {"mount": "/media/chiamain/a", "free_gb": 100, "fs": "ext4"},
+            {"mount": "/media/chiamain/b", "free_gb": 500, "fs": "ext4"},
         ]
         hv = {"worst_plot": "/media/chiamain/b/plot-x.plot"}
         d = pb.pick_destination(choices, set(), hv)
+        self.assertEqual(d["mount"], "/media/chiamain/a")
+
+    def test_pick_destination_prefers_ext4_over_ntfs(self):
+        choices = [
+            {"mount": "/media/chiamain/a", "free_gb": 100, "fs": "ext4"},
+            {"mount": "/media/chiamain/New Volume", "free_gb": 9000, "fs": "ntfs3"},
+        ]
+        d = pb.pick_destination(choices, set(), {})
         self.assertEqual(d["mount"], "/media/chiamain/a")
 
 

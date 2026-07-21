@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.53.0'
+VERSION='1.54.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -586,22 +586,26 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
 
 
 def pick_destination(choices, used, hv=None):
- """Prefer free space; lightly deprioritize mounts seen in recent slow quality lookups."""
+ """Prefer free space on native Linux FS; avoid worst recent quality mount."""
  avail=[d for d in choices if d.get('mount') not in used]
  if not avail:return None
+ def is_native(d):
+  fs=(d.get('fs') or '').lower()
+  return fs.startswith('ext') or fs in ('xfs','btrfs','zfs')
+ native=[d for d in avail if is_native(d)]
+ pool=native if native else avail
  bad=set()
  worst=(hv or {}).get('worst_plot') or ''
- if worst.startswith('/media/chiamain/'):
-  # /media/chiamain/<mount>/plot-...
+ if worst.startswith('/media/'):
   parts=worst.split('/')
   if len(parts)>=4:
-   bad.add('/'+'/'.join(parts[1:4]))  # /media/chiamain/NAME
+   bad.add('/'+'/'.join(parts[1:4]))
  def score(d):
   free=float(d.get('free_gb') or 0)
-  # Strongly avoid the mount that just produced the slowest lookup.
   pen=1e9 if d.get('mount') in bad else 0
-  return free-pen
- return max(avail, key=score)
+  name_pen=50 if ' ' in (d.get('mount') or '') else 0
+  return free-pen-name_pen
+ return max(pool, key=score)
 
 def transfer_loop():
  last_cleanup=0
