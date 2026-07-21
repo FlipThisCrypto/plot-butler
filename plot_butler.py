@@ -33,6 +33,8 @@ HARVESTER_RESUME_S=8.0           # resume only after max cools under this
 HARVESTER_POLL_S=30              # how often to re-read farmer log (SSH)
 TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
 STAGING_SETTLE_S=60
+TRANSFER_HISTORY_PATH=ROOT / 'transfer_history.json'
+TRANSFER_HISTORY_MAX=200
 
 lock=threading.RLock()
 active={}
@@ -281,6 +283,21 @@ def harvester_quality_stats():
   'worst_plot':paths[times.index(max(times))] if n else None,
  }
 
+
+def load_transfer_history():
+ try:
+  if TRANSFER_HISTORY_PATH.exists():
+   data=json.loads(TRANSFER_HISTORY_PATH.read_text())
+   if isinstance(data,list):
+    with lock: state['transfers']=data[-TRANSFER_HISTORY_MAX:]
+ except Exception: pass
+
+def save_transfer_history():
+ try:
+  with lock: data=list(state.get('transfers') or [])[-TRANSFER_HISTORY_MAX:]
+  TRANSFER_HISTORY_PATH.write_text(json.dumps(data))
+ except Exception: pass
+
 def stop_active_transfers(reason):
  """SIGTERM in-flight rsyncs so farming I/O can recover; --partial resumes later."""
  victims=[]
@@ -388,6 +405,7 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   })
   state['transfers'].append(dict(rec))
   active.pop(path.name,None)
+ save_transfer_history()
 
 def transfer_loop():
  while True:
@@ -533,6 +551,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__=='__main__':
  STAGING.mkdir(parents=True,exist_ok=True)
+ load_transfer_history()
  threading.Thread(target=refresh,daemon=True).start()
  threading.Thread(target=transfer_loop,daemon=True).start()
  print(f'The Plot Butler listening on 0.0.0.0:{PORT}',flush=True)
