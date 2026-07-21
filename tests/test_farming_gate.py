@@ -152,6 +152,11 @@ class TestDestinationPick(unittest.TestCase):
         d = pb.pick_destination(choices, set(), hv)
         self.assertEqual(d["mount"], "/media/chiamain/a")
 
+    def test_pick_destination_ntfs_fallback(self):
+        choices = [{"mount": "/media/chiamain/New Volume", "free_gb": 500, "fs": "ntfs3"}]
+        d = pb.pick_destination(choices, set(), {})
+        self.assertEqual(d["mount"], "/media/chiamain/New Volume")
+
     def test_pick_destination_prefers_ext4_over_ntfs(self):
         choices = [
             {"mount": "/media/chiamain/a", "free_gb": 100, "fs": "ext4"},
