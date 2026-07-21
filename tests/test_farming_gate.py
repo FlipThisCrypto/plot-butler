@@ -2,10 +2,16 @@
 """Offline tests for recompute / harvester transfer gating."""
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import plot_butler as pb  # noqa: E402
+
+_TEST_DIR = tempfile.mkdtemp(prefix="plot-butler-test-")
+pb.EVENT_LOG = Path(_TEST_DIR) / "events.log"
+pb.TRANSFER_HISTORY_PATH = Path(_TEST_DIR) / "history.json"
 
 
 class TestParsers(unittest.TestCase):
