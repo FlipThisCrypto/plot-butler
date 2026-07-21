@@ -19,12 +19,12 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.52.0'
+VERSION='1.53.0'
 ROOT=Path(__file__).resolve().parent
-STAGING=Path('/home/smokey/plots/staging')
-TEMP_DIR=Path('/home/smokey/plots/temp')
-SPOOL=Path('/media/smokey/1002/plot-butler/staging')
-REMOTE='chiamain@100.101.40.76'
+STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
+TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
+SPOOL=Path(os.environ.get('PLOT_BUTLER_SPOOL','/media/smokey/1002/plot-butler/staging'))
+REMOTE=os.environ.get('PLOT_BUTLER_REMOTE','chiamain@100.101.40.76')
 MIN_FREE_GB=90
 PORT=int(os.environ.get('PLOT_BUTLER_PORT','8088'))
 API_TOKEN=os.environ.get('PLOT_BUTLER_API_TOKEN','').strip()
@@ -39,7 +39,7 @@ RECOMPUTE_PAUSE_P90_MS=_env_int("PLOT_BUTLER_RECOMPUTE_PAUSE_P90_MS",5000)
 RECOMPUTE_RESUME_P90_MS=_env_int("PLOT_BUTLER_RECOMPUTE_RESUME_P90_MS",2500)
 RECOMPUTE_CRITICAL_MAX_MS=_env_int("PLOT_BUTLER_RECOMPUTE_CRITICAL_MAX_MS",20000)
 # Farmer harvester quality lookups must stay under ~20s or rewards are lost.
-HARVESTER_LOG='/home/chiamain/.chia/mainnet/log/debug.log'
+HARVESTER_LOG=os.environ.get('PLOT_BUTLER_HARVESTER_LOG','/home/chiamain/.chia/mainnet/log/debug.log')
 HARVESTER_SAMPLE_LINES=800
 HARVESTER_PAUSE_S=_env_float("PLOT_BUTLER_HARVESTER_PAUSE_S",15.0)
 HARVESTER_RESUME_S=_env_float("PLOT_BUTLER_HARVESTER_RESUME_S",8.0)
