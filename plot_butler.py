@@ -21,6 +21,7 @@ PORT=int(os.environ.get('PLOT_BUTLER_PORT','8088'))
 # Shared path with recompute: one bulk stream, modest ceiling, adaptive pause.
 MAX_ACTIVE_TRANSFERS=1
 RSYNC_BWLIMIT_KBPS=12000          # 12 MiB/s — leaves headroom for recompute RTT
+RSYNC_BWLIMIT_WARM_KBPS=6000      # half rate for first transfer after farming pause
 RECOMPUTE_WINDOW_S=300           # journal sample window for latency stats (5 min)
 RECOMPUTE_PAUSE_P90_MS=5000      # pause new transfers when recent p90 exceeds this
 RECOMPUTE_RESUME_P90_MS=2500     # resume only after p90 cools below this
@@ -51,6 +52,7 @@ state={
 # hysteresis for transfer gate (recompute + harvester)
 _xfer_paused=False
 _pause_reasons=set()
+_last_resume_at=0.0
 
 def run(a,t=8):
  try:return subprocess.run(a,text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=t).stdout.strip()
@@ -364,6 +366,8 @@ def transfer_allowed(rc, hv=None):
  else:
   if _xfer_paused:
    reason='resumed cool-down'
+   global _last_resume_at
+   _last_resume_at=time.time()
   else:
    reason='ok' if not reasons else 'ok '+('; '.join(reasons))
   _xfer_paused=False
@@ -442,13 +446,15 @@ def transfer_loop():
    avail=[d for d in choices if d['mount'] not in used]
    if not avail:continue
    dest=max(avail,key=lambda x:x.get('free_gb',0))['mount']
+   warm=(time.time()-_last_resume_at)<1800  # 30m warm window after farming pause
+   bw=RSYNC_BWLIMIT_WARM_KBPS if warm else RSYNC_BWLIMIT_KBPS
    with lock:
     active[f.name]={
      'name':f.name,'dest':dest,'start':time.time(),'bytes':0,
      'total':f.stat().st_size,'speed':0,'average_speed':0,'status':'copying',
-     'bwlimit_kbps':RSYNC_BWLIMIT_KBPS,
+     'bwlimit_kbps':bw,'warm_start':warm,
     }
-   threading.Thread(target=send_plot,args=(f,dest),daemon=True).start()
+   threading.Thread(target=send_plot,args=(f,dest,bw),daemon=True).start()
    break  # at most one new start per loop tick
   time.sleep(10)
 
