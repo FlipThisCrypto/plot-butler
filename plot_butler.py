@@ -352,6 +352,26 @@ def open_temp_paths():
   pass
  return held
 
+
+def reap_orphan_rsync():
+ """Kill plot-butler rsync children not tracked in active (e.g. after crash)."""
+ tracked={rec.get('pid') for rec in active.values() if rec.get('pid')}
+ out=run(['bash','-lc',"ps -eo pid=,args= | grep '[r]sync -a --whole-file --inplace --partial' || true"],5)
+ killed=0
+ for l in out.splitlines():
+  parts=l.split(None,1)
+  if len(parts)<2: continue
+  try: pid=int(parts[0])
+  except ValueError: continue
+  if pid in tracked: continue
+  if 'plot-butler/staging' not in parts[1] and 'plots/staging' not in parts[1]: continue
+  try:
+   os.kill(pid, signal.SIGTERM); killed+=1
+  except ProcessLookupError: pass
+  except PermissionError: pass
+ if killed: log_event('reap_orphan_rsync', killed=killed)
+ return killed
+
 def cleanup_orphan_temps():
  """Remove cuda_plot_tmp* not open by a live process — reclaim NVMe for farming/plotting."""
  held=open_temp_paths()
@@ -542,7 +562,7 @@ def transfer_loop():
  while True:
   try:
    if time.time()-last_cleanup>300:
-    try: cleanup_orphan_temps()
+    try: cleanup_orphan_temps(); reap_orphan_rsync()
     except Exception as e: log_event("cleanup_error", err=str(e))
     last_cleanup=time.time()
    with lock:
