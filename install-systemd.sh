@@ -18,3 +18,11 @@ sudo systemctl daemon-reload
 sudo systemctl enable plot-butler.service
 echo "Installed. Restart when ready:"
 echo "  sudo systemctl restart chia-recompute.service plot-butler.service"
+
+if [[ ! -f "$ROOT/plotter.env" ]]; then
+  echo "WARNING: $ROOT/plotter.env missing — copy plotter.env.example before starting the plotter." >&2
+fi
+if [[ ! -f "$ROOT/plot-butler.env" ]]; then
+  echo "NOTE: optional $ROOT/plot-butler.env not present (see plot-butler.env.example)." >&2
+fi
+
