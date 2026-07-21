@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.50.0'
+VERSION='1.51.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path('/home/smokey/plots/staging')
 TEMP_DIR=Path('/home/smokey/plots/temp')
@@ -375,6 +375,37 @@ def reap_orphan_rsync():
  if killed: log_event('reap_orphan_rsync', killed=killed)
  return killed
 
+def temp_usage_stats():
+ """Break TEMP_DIR usage into active (open by a process) vs orphan bytes.
+
+ Gigahorse C7 legitimately holds ~200+ GiB of open tmp2/tmp3 during a plot;
+ alerting on total size alone is a false critical. Operators care about
+ *orphan* volume that cleanup should reclaim.
+ """
+ held=open_temp_paths()
+ total=0; active_b=0; orphan_b=0; files=0; orphan_files=0; active_files=0
+ try:
+  paths=list(TEMP_DIR.glob('cuda_plot_tmp*'))
+ except Exception:
+  paths=[]
+ for f in paths:
+  if not f.is_file(): continue
+  try: sz=f.stat().st_size
+  except OSError: continue
+  files+=1; total+=sz
+  if str(f) in held:
+   active_b+=sz; active_files+=1
+  else:
+   orphan_b+=sz; orphan_files+=1
+ return {
+  'temp_used_gb':round(total/1073741824,1),
+  'temp_active_gb':round(active_b/1073741824,1),
+  'temp_orphan_gb':round(orphan_b/1073741824,1),
+  'temp_files':files,
+  'temp_active_files':active_files,
+  'temp_orphan_files':orphan_files,
+ }
+
 def cleanup_orphan_temps():
  """Remove cuda_plot_tmp* not open by a live process — reclaim NVMe for farming/plotting."""
  held=open_temp_paths()
@@ -704,15 +735,15 @@ def _refresh_once():
    spool_free=shutil.disk_usage(SPOOL).free/1073741824
   except Exception:
    spool_free=None
-  try:
-   temp_used=sum(f.stat().st_size for f in TEMP_DIR.glob('cuda_plot_tmp*') if f.is_file())/1073741824
-  except Exception:
-   temp_used=None
+  tu=temp_usage_stats()
   pressure={'queued_plots':queued,'staging_free_gb':round(staging_free,1) if staging_free is not None else None,
             'spool_free_gb':round(spool_free,1) if spool_free is not None else None,
-            'temp_used_gb':round(temp_used,1) if temp_used is not None else None}
-  if temp_used is not None and temp_used>200:
-   alerts.append({'level':'critical','msg':f'Plot temp dir using {temp_used:.0f} GiB — orphan cleanup may be failing'})
+            **tu}
+  # Only orphan volume is a cleanup failure; active tmp is normal plotting.
+  if tu.get('temp_orphan_gb',0)>=50:
+   alerts.append({'level':'critical','msg':f"Plot temp orphans {tu['temp_orphan_gb']:.0f} GiB ({tu.get('temp_orphan_files',0)} files) — cleanup should reclaim NVMe"})
+  elif tu.get('temp_orphan_gb',0)>=20:
+   alerts.append({'level':'warn','msg':f"Plot temp orphans {tu['temp_orphan_gb']:.0f} GiB ({tu.get('temp_orphan_files',0)} files)"})
   if queued>=SPOOL_CRIT_PLOTS:
    alerts.append({'level':'critical','msg':f'Plot spool backlog critical: {queued} plots waiting (transfers may be gated for farming)'})
   elif queued>=SPOOL_WARN_PLOTS:

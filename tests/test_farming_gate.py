@@ -109,6 +109,27 @@ class TestTransferGate(unittest.TestCase):
 
 
 
+class TestTempUsage(unittest.TestCase):
+    def test_temp_usage_stats_keys(self):
+        stats = pb.temp_usage_stats()
+        for k in (
+            "temp_used_gb",
+            "temp_active_gb",
+            "temp_orphan_gb",
+            "temp_files",
+            "temp_active_files",
+            "temp_orphan_files",
+        ):
+            self.assertIn(k, stats)
+        self.assertGreaterEqual(stats["temp_used_gb"], 0)
+        self.assertGreaterEqual(stats["temp_orphan_gb"], 0)
+        # Active + orphan should not exceed total (allow float rounding).
+        self.assertLessEqual(
+            stats["temp_active_gb"] + stats["temp_orphan_gb"],
+            stats["temp_used_gb"] + 0.2,
+        )
+
+
 class TestDestinationPick(unittest.TestCase):
     def test_stall_default(self):
         self.assertGreaterEqual(pb.TRANSFER_STALL_S, 60)
