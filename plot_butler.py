@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.54.0'
+VERSION='1.55.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -59,6 +59,7 @@ STAGING_MIN_FREE_GB=100
 
 lock=threading.RLock()
 active={}
+failed_cooldown={}
 cache={'at':0,'drives':[],'temps':[],'plots':set(),'harvester':{},'harvester_at':0}
 _net_prev={'at':0,'ifaces':{}}
 state={
@@ -583,6 +584,8 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   active.pop(path.name,None)
  save_transfer_history()
  log_event('transfer_done', name=path.name, status=rec.get('status'), dest=dest, avg=rec.get('average_speed'))
+ if not ok:
+  with lock: failed_cooldown[path.name]=time.time()+600  # retry after 10m
 
 
 def pick_destination(choices, used, hv=None):
@@ -652,6 +655,9 @@ def transfer_loop():
     choices=[d for d in ds if d.get('scope')=='remote' and d.get('free_gb',0)>MIN_FREE_GB]
     for f in list(SPOOL.glob('*.plot'))+list(STAGING.glob('*.plot')):
      if len(active)>=MAX_ACTIVE_TRANSFERS or f.name in active or not choices:continue
+     with lock:
+      until=failed_cooldown.get(f.name,0)
+     if until and time.time()<until:continue
      if time.time()-f.stat().st_mtime<STAGING_SETTLE_S:continue
      try:
       sz=f.stat().st_size
