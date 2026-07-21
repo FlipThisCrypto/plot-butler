@@ -44,6 +44,7 @@ HARVESTER_PAUSE_S=_env_float("PLOT_BUTLER_HARVESTER_PAUSE_S",15.0)
 HARVESTER_RESUME_S=_env_float("PLOT_BUTLER_HARVESTER_RESUME_S",8.0)
 HARVESTER_POLL_S=30              # how often to re-read farmer log (SSH)
 TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
+TRANSFER_STALL_S=_env_int("PLOT_BUTLER_TRANSFER_STALL_S", 180)  # no progress => kill/retry
 STAGING_SETTLE_S=60
 TRANSFER_HISTORY_PATH=ROOT / 'transfer_history.json'
 TRANSFER_HISTORY_MAX=200
@@ -75,6 +76,7 @@ def run(a,t=8):
 
 SSH_OPTS=[
  'ssh','-o','BatchMode=yes','-o','ConnectTimeout=4',
+ '-o','ServerAliveInterval=30','-o','ServerAliveCountMax=3',
  '-o','ControlMaster=auto','-o','ControlPersist=120',
  '-o','ControlPath=/tmp/plot-butler-ssh-%C',
 ]
@@ -473,7 +475,7 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
  p=subprocess.Popen(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
  with lock:
   rec.update({'pid':p.pid,'bwlimit_kbps':bwlimit_kbps,'status':'copying'})
- samples=[]
+ samples=[]; last_progress=time.time(); last_bytes=0
  while p.poll() is None:
   remote=ssh(
    f"find {shlex.quote(dest)} -maxdepth 1 -type f -name {shlex.quote(path.name)} -printf '%s\\n' 2>/dev/null | tail -1",
@@ -484,6 +486,13 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   speed=max(0,(b-prev)/max(.1,now-pt))
   with lock:rec.update({'bytes':b,'speed':speed,'sample_time':now})
   samples.append(speed)
+  if b>last_bytes:
+   last_bytes=b; last_progress=now
+  elif now-last_progress>TRANSFER_STALL_S:
+   log_event('transfer_stall', name=path.name, bytes=b, stalled_s=now-last_progress)
+   try: p.terminate()
+   except Exception: pass
+   break
   time.sleep(TRANSFER_POLL_S)
  remote_size=ssh(f'stat -c %s {shlex.quote(dest+"/"+path.name)} 2>/dev/null || echo 0',8)
  ok=p.wait()==0 and remote_size.strip().splitlines()[-1:]==[str(expected)]
