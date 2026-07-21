@@ -6,7 +6,7 @@ to chiamain. Farming recompute is latency-sensitive (~28s signage window);
 bulk plot copies are not. This process therefore throttles transfers and
 pauses new ones when recompute latency climbs into stale-share territory.
 """
-import glob,json,os,re,shlex,shutil,signal,subprocess,threading,time
+import glob,json,os,re,shlex,shutil,signal,subprocess,sys,threading,time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
@@ -915,6 +915,8 @@ class Handler(BaseHTTPRequestHandler):
  def log_message(self,*a):pass
 
 if __name__=='__main__':
+ if sys.version_info < (3,10):
+  sys.stderr.write('Plot Butler requires Python 3.10+\n'); sys.exit(2)
  STAGING.mkdir(parents=True,exist_ok=True)
  load_transfer_history()
  threading.Thread(target=refresh,daemon=True).start()
