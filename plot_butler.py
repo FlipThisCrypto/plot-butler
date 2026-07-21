@@ -544,7 +544,7 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
  cmd=[
   'ionice','-c3','nice','-n','10',
   'rsync','-a','--whole-file','--inplace','--partial',
-  f'--bwlimit={int(bwlimit_kbps)}','--info=progress2',
+  f'--bwlimit={int(bwlimit_kbps)}','--timeout=120','--info=progress2',
   '-e',' '.join(SSH_OPTS),
   str(path),f'{REMOTE}:{dest}/',
  ]
