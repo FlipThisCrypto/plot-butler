@@ -19,7 +19,7 @@ def _env_float(name, default):
  try:return float(os.environ.get(name, default))
  except (TypeError, ValueError):return float(default)
 
-VERSION='1.61.0'
+VERSION='1.62.0'
 ROOT=Path(__file__).resolve().parent
 STAGING=Path(os.environ.get('PLOT_BUTLER_STAGING','/home/smokey/plots/staging'))
 TEMP_DIR=Path(os.environ.get('PLOT_BUTLER_TEMP','/home/smokey/plots/temp'))
@@ -895,11 +895,14 @@ class Handler(BaseHTTPRequestHandler):
     pol=dict(state.get('transfer_policy') or {})
     alerts=list(state.get('alerts') or [])
     updated=state.get('updated') or 0
-   sp=dict(state.get('storage_pressure') or {})
+    sp=dict(state.get('storage_pressure') or {})
+   if not updated:
+    body=json.dumps({'ok':False,'status':'starting','updated':0}).encode()
+    self._send(200, body); return
    disk_ok=(sp.get('staging_free_gb') is None) or (sp.get('staging_free_gb')>=STAGING_MIN_FREE_GB)
    healthy=rc.get('service')=='active' and hv.get('health') not in ('critical',) and rc.get('health') not in ('critical','down') and disk_ok
    body=json.dumps({
-    'ok':bool(healthy),'updated':updated,
+    'ok':bool(healthy),'status':'ready','updated':updated,
     'recompute_health':rc.get('health'),'harvester_health':hv.get('health'),
     'transfers_paused':bool(pol.get('paused')),'pause_reason':pol.get('reason'),
     'staging_free_gb':sp.get('staging_free_gb'),'queued_plots':sp.get('queued_plots'),
