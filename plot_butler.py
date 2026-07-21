@@ -911,8 +911,7 @@ class Handler(BaseHTTPRequestHandler):
     d=dict(state); d['transfers']=state['transfers']+list(active.values())
    self._send(200, json.dumps(d).encode()); return
   if self.path in ('/','/index.html'):
-   b=(ROOT/'index.html').read_bytes()
-   self.send_response(200); self.send_header('Content-Type','text/html'); self.end_headers(); self.wfile.write(b); return
+   self._send(200,(ROOT/'index.html').read_bytes(),'text/html; charset=utf-8'); return
   self.send_error(404)
  def log_message(self,*a):pass
 
