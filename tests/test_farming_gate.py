@@ -108,5 +108,17 @@ class TestTransferGate(unittest.TestCase):
         self.assertLess(pb.RECOMPUTE_RESUME_P90_MS, pb.RECOMPUTE_PAUSE_P90_MS)
 
 
+
+class TestDestinationPick(unittest.TestCase):
+    def test_pick_destination_avoids_worst_mount(self):
+        choices = [
+            {"mount": "/media/chiamain/a", "free_gb": 100},
+            {"mount": "/media/chiamain/b", "free_gb": 500},
+        ]
+        hv = {"worst_plot": "/media/chiamain/b/plot-x.plot"}
+        d = pb.pick_destination(choices, set(), hv)
+        self.assertEqual(d["mount"], "/media/chiamain/a")
+
+
 if __name__ == "__main__":
     unittest.main()

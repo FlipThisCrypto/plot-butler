@@ -435,7 +435,8 @@ def pick_destination(choices, used, hv=None):
    bad.add('/'+'/'.join(parts[1:4]))  # /media/chiamain/NAME
  def score(d):
   free=float(d.get('free_gb') or 0)
-  pen=50 if d.get('mount') in bad else 0
+  # Strongly avoid the mount that just produced the slowest lookup.
+  pen=1e9 if d.get('mount') in bad else 0
   return free-pen
  return max(avail, key=score)
 
