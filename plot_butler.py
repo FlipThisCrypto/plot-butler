@@ -421,6 +421,24 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   active.pop(path.name,None)
  save_transfer_history()
 
+
+def pick_destination(choices, used, hv=None):
+ """Prefer free space; lightly deprioritize mounts seen in recent slow quality lookups."""
+ avail=[d for d in choices if d.get('mount') not in used]
+ if not avail:return None
+ bad=set()
+ worst=(hv or {}).get('worst_plot') or ''
+ if worst.startswith('/media/chiamain/'):
+  # /media/chiamain/<mount>/plot-...
+  parts=worst.split('/')
+  if len(parts)>=4:
+   bad.add('/'+'/'.join(parts[1:4]))  # /media/chiamain/NAME
+ def score(d):
+  free=float(d.get('free_gb') or 0)
+  pen=50 if d.get('mount') in bad else 0
+  return free-pen
+ return max(avail, key=score)
+
 def transfer_loop():
  while True:
   with lock:
@@ -450,9 +468,10 @@ def transfer_loop():
    if len(active)>=MAX_ACTIVE_TRANSFERS or f.name in active or not choices:continue
    if time.time()-f.stat().st_mtime<STAGING_SETTLE_S:continue
    used={x['dest'] for x in active.values()}
-   avail=[d for d in choices if d['mount'] not in used]
-   if not avail:continue
-   dest=max(avail,key=lambda x:x.get('free_gb',0))['mount']
+   with lock: hv=dict(state.get('harvester') or {})
+   dest_rec=pick_destination(choices, used, hv)
+   if not dest_rec:continue
+   dest=dest_rec['mount']
    warm=(time.time()-_last_resume_at)<1800  # 30m warm window after farming pause
    bw=RSYNC_BWLIMIT_WARM_KBPS if warm else RSYNC_BWLIMIT_KBPS
    with lock:
