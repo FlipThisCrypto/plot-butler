@@ -14,3 +14,7 @@ health:
 
 metrics:
 	curl -sS http://127.0.0.1:8088/api/metrics
+
+smoke:
+	./scripts/smoke_check.sh
+
