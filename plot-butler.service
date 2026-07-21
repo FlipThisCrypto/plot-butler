@@ -1,0 +1,17 @@
+[Unit]
+Description=The Plot Butler dashboard and transfer scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=smokey
+WorkingDirectory=/home/smokey/plot-butler
+ExecStart=/usr/bin/python3 /home/smokey/plot-butler/plot_butler.py
+Restart=always
+RestartSec=5
+Environment=PLOT_BUTLER_PORT=8088
+
+[Install]
+WantedBy=multi-user.target
+

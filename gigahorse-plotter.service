@@ -1,0 +1,17 @@
+[Unit]
+Description=Gigahorse C7 plotter for The Plot Butler
+After=plot-butler.service
+Requires=plot-butler.service
+
+[Service]
+Type=simple
+User=smokey
+WorkingDirectory=/home/smokey
+ExecStart=/home/smokey/plot-butler/plotter_loop.sh
+Restart=always
+RestartSec=15
+KillSignal=SIGINT
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
