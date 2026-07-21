@@ -123,6 +123,10 @@ sudo cp logrotate-plot-butler.conf /etc/logrotate.d/plot-butler
 5. Free NVMe if staging full: plot-butler cleans orphan `cuda_plot_tmp*`; verify `df -h /`.
 6. When healthy: `POST /api/resume-transfers` (warm bandwidth applies for 30m).
 
+## Version
+
+See `VERSION` in `plot_butler.py` and [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
