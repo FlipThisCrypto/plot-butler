@@ -55,6 +55,7 @@ STAGING_MIN_FREE_GB=100
 lock=threading.RLock()
 active={}
 cache={'at':0,'drives':[],'temps':[],'plots':set(),'harvester':{},'harvester_at':0}
+_net_prev={'at':0,'ifaces':{}}
 state={
  'name':'The Plot Butler','updated':0,'plot':{},'gpus':[],'recompute':{},
  'harvester':{},'drives':[],'temperatures':[],'network':[],'transfers':[],
@@ -574,12 +575,17 @@ def _refresh_once():
    'harvester_pause_s':HARVESTER_PAUSE_S,'harvester_resume_s':HARVESTER_RESUME_S,
    'pause_sources':sorted(_pause_reasons),
   }
-  net=[]
+  net=[]; now_net=time.time(); prev=_net_prev
   for l in open('/proc/net/dev').read().splitlines()[2:]:
    if ':' in l:
-    i,v=l.split(':',1); a=v.split()
-    if i.strip()!='lo' and len(a)>=9:
-     net.append({'iface':i.strip(),'rx':int(a[0]),'tx':int(a[8])})
+    i,v=l.split(':',1); a=v.split(); name=i.strip()
+    if name!='lo' and len(a)>=9:
+     rx,tx=int(a[0]),int(a[8]); dt=max(0.1, now_net-prev.get('at',0))
+     pr=prev.get('ifaces',{}).get(name)
+     rx_bps=(rx-pr['rx'])/dt if pr else 0; tx_bps=(tx-pr['tx'])/dt if pr else 0
+     if pr and (rx<pr['rx'] or tx<pr['tx']): rx_bps=tx_bps=0
+     net.append({'iface':name,'rx':rx,'tx':tx,'rx_bps':max(0,rx_bps),'tx_bps':max(0,tx_bps)})
+  _net_prev['at']=now_net; _net_prev['ifaces']={n['iface']:{'rx':n['rx'],'tx':n['tx']} for n in net}
   alerts=[]
   if rc.get('health')=='critical':
    alerts.append({'level':'critical','msg':f"Recompute latency critical (p90={rc['latency_ms'].get('p90')}ms max={rc['latency_ms'].get('max')}ms); plot transfers paused"})
