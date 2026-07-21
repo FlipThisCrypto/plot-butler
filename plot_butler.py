@@ -44,6 +44,7 @@ TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
 STAGING_SETTLE_S=60
 TRANSFER_HISTORY_PATH=ROOT / 'transfer_history.json'
 TRANSFER_HISTORY_MAX=200
+EVENT_LOG=ROOT / 'plot-butler-events.log'
 SPOOL_WARN_PLOTS=10
 SPOOL_CRIT_PLOTS=25
 STAGING_MIN_FREE_GB=100
@@ -311,6 +312,13 @@ def harvester_quality_stats():
  }
 
 
+
+def log_event(kind, **fields):
+ try:
+  rec={'ts':time.time(),'kind':kind,**fields}
+  with open(EVENT_LOG,'a') as f: f.write(json.dumps(rec,default=str)+'\n')
+ except Exception: pass
+
 def load_transfer_history():
  try:
   if TRANSFER_HISTORY_PATH.exists():
@@ -387,12 +395,14 @@ def transfer_allowed(rc, hv=None):
   if harvester_hold:_pause_reasons.add('harvester')
   if not _xfer_paused:
    stop_active_transfers(';'.join(reasons) or 'farming-protect')
+   log_event('transfer_pause', reasons=reasons)
   _xfer_paused=True
   reason='pause '+('; '.join(reasons) if reasons else 'farming')
  else:
   if _xfer_paused:
    reason='resumed cool-down'
    _last_resume_at=time.time()
+   log_event('transfer_resume')
   else:
    reason='ok' if not reasons else 'ok '+('; '.join(reasons))
   _xfer_paused=False
@@ -438,6 +448,7 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   state['transfers'].append(dict(rec))
   active.pop(path.name,None)
  save_transfer_history()
+ log_event('transfer_done', name=path.name, status=rec.get('status'), dest=dest, avg=rec.get('average_speed'))
 
 
 def pick_destination(choices, used, hv=None):

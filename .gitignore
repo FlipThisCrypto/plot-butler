@@ -7,3 +7,4 @@ venv/
 *.log
 .DS_Store
 transfer_history.json
+plot-butler-events.log
