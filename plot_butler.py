@@ -51,8 +51,13 @@ def run(a,t=8):
  try:return subprocess.run(a,text=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=t).stdout.strip()
  except Exception:return ''
 
+SSH_OPTS=[
+ 'ssh','-o','BatchMode=yes','-o','ConnectTimeout=4',
+ '-o','ControlMaster=auto','-o','ControlPersist=120',
+ '-o','ControlPath=/tmp/plot-butler-ssh-%C',
+]
 def ssh(c,t=10):
- return run(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=4',REMOTE,c],t)
+ return run(SSH_OPTS+[REMOTE,c],t)
 
 def gpus():
  out=[]; raw=run(['nvidia-smi','--query-gpu=index,name,temperature.gpu,utilization.gpu,memory.total,memory.used,power.draw,power.limit','--format=csv,noheader,nounits'])
@@ -352,6 +357,7 @@ def send_plot(path,dest,bwlimit_kbps=RSYNC_BWLIMIT_KBPS):
   'ionice','-c3','nice','-n','10',
   'rsync','-a','--whole-file','--inplace','--partial',
   f'--bwlimit={int(bwlimit_kbps)}','--info=progress2',
+  '-e',' '.join(SSH_OPTS),
   str(path),f'{REMOTE}:{dest}/',
  ]
  p=subprocess.Popen(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.STDOUT)
