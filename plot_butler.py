@@ -505,6 +505,16 @@ def transfer_loop():
 
 def refresh():
  while True:
+  try:
+   _refresh_once()
+  except Exception as e:
+   with lock:
+    state.setdefault('alerts', []).append({'level':'warn','msg':f'refresh error: {type(e).__name__}: {e}'})
+    state['alerts']=state['alerts'][-20:]
+    state['refresh_errors']=state.get('refresh_errors',0)+1
+  time.sleep(5)
+
+def _refresh_once():
   now=time.time(); gs=gpus(); p=plot_status()
   refresh_remote=now-cache['at']>=30
   if refresh_remote:
@@ -583,7 +593,6 @@ def refresh():
    state['history']['transfers']=(state['history']['transfers']+[{'t':now,'speed':sum(speeds)}])[-120:]
    p90=rc.get('latency_ms',{}).get('p90') or 0
    state['history']['recompute_p90']=(state['history']['recompute_p90']+[{'t':now,'p90':p90}])[-120:]
-  time.sleep(5)
 
 class Handler(BaseHTTPRequestHandler):
  def do_POST(self):
