@@ -1,0 +1,13 @@
+repos:
+  - repo: local
+    hooks:
+      - id: unittest
+        name: unit tests
+        entry: python3 -m unittest discover -s tests -q
+        language: system
+        pass_filenames: false
+      - id: py-compile
+        name: py_compile plot_butler
+        entry: python3 -m py_compile plot_butler.py
+        language: system
+        pass_filenames: false
