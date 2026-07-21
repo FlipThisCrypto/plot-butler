@@ -43,6 +43,8 @@ HARVESTER_SAMPLE_LINES=800
 HARVESTER_PAUSE_S=_env_float("PLOT_BUTLER_HARVESTER_PAUSE_S",15.0)
 HARVESTER_RESUME_S=_env_float("PLOT_BUTLER_HARVESTER_RESUME_S",8.0)
 HARVESTER_POLL_S=30              # how often to re-read farmer log (SSH)
+REMOTE_REFRESH_S=30
+REMOTE_REFRESH_S_DEGRADED=90  # slow remote inventory when farming is stressed
 TRANSFER_POLL_S=3                # remote size poll interval (less SSH chatter)
 TRANSFER_STALL_S=_env_int("PLOT_BUTLER_TRANSFER_STALL_S", 180)  # no progress => kill/retry
 STAGING_SETTLE_S=60
@@ -637,7 +639,11 @@ def refresh():
 
 def _refresh_once():
   now=time.time(); gs=gpus(); p=plot_status()
-  refresh_remote=now-cache['at']>=30
+  with lock:
+   pol=dict(state.get('transfer_policy') or {}); hv0=dict(state.get('harvester') or {}); rc0=dict(state.get('recompute') or {})
+  stressed=bool(pol.get('paused')) or hv0.get('health') in ('critical','degraded') or rc0.get('health') in ('critical','degraded')
+  remote_every=REMOTE_REFRESH_S_DEGRADED if stressed else REMOTE_REFRESH_S
+  refresh_remote=now-cache['at']>=remote_every
   if refresh_remote:
    ds=remote_drives(); rt=remote_temps(ds); rp=remote_plot_names()
    with lock:cache.update({'at':now,'drives':ds,'temps':rt,'plots':rp})
